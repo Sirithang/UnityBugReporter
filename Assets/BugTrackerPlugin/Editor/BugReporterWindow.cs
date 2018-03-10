@@ -7,6 +7,9 @@ using UnityEngine;
 public class BugReporterWindow : EditorWindow
 {
     private Vector2 scrollPosition = Vector2.zero;
+    GUIContent iconeContent;
+
+    public List<BugReporterPlugin.IssueEntry> _currentLevelsIssues = new List<BugReporterPlugin.IssueEntry>();
 
     [MenuItem("Bug Reporter/Open")]
     static void Open()
@@ -17,11 +20,41 @@ public class BugReporterWindow : EditorWindow
     private void OnEnable()
     {
         BugReporterPlugin.Init();
+
+        if(BugReporterPlugin.backend != null && BugReporterPlugin.backend.CanRequest())
+        {
+            BugReporterPlugin.RequestIssues(ReceivedIssues);
+        }
+
+        iconeContent = new GUIContent(EditorGUIUtility.Load("BugIcone.png") as Texture2D);
+
+        SceneView.onSceneGUIDelegate += SceneGUI;
     }
 
     private void OnDisable()
     {
         BugReporterPlugin.SaveSettings();
+        SceneView.onSceneGUIDelegate -= SceneGUI;
+    }
+
+    void ReceivedIssues(List<BugReporterPlugin.IssueEntry> entries)
+    {
+        int sceneCount = UnityEngine.SceneManagement.SceneManager.sceneCount;
+        string[] loadedSceneGUID = new string[sceneCount];
+        for (int i = 0; i < sceneCount; ++i)
+        {
+            var scene = UnityEngine.SceneManagement.SceneManager.GetSceneAt(i);
+            loadedSceneGUID[i] = AssetDatabase.AssetPathToGUID(scene.path);
+        }
+
+        _currentLevelsIssues.Clear();
+        for (int i = 0; i < entries.Count; ++i)
+        {
+           if(ArrayUtility.Contains(loadedSceneGUID, entries[i].sceneGUID))
+            {
+                _currentLevelsIssues.Add(entries[i]);
+            }
+        }
     }
 
     private void OnGUI()
@@ -51,28 +84,25 @@ public class BugReporterWindow : EditorWindow
             }
             else
             {
+                EditorGUILayout.BeginHorizontal();
                 if (GUILayout.Button("Change project path"))
                     backendSetting.projectPath = "";
+                if (BugReporterPlugin.backend.CanRequest() && GUILayout.Button("Referesh issues"))
+                {
+                    BugReporterPlugin.RequestIssues(ReceivedIssues);
+                }
+                EditorGUILayout.EndHorizontal();
 
                 if (BugReporterPlugin.backend.CanRequest())
                 {
                     if (BugReporterPlugin.issueRequestState == BugReporterPlugin.IssueRequestState.Empty)
-                        BugReporterPlugin.RequestIssues();
+                        BugReporterPlugin.RequestIssues(ReceivedIssues);
                     else if (BugReporterPlugin.issueRequestState == BugReporterPlugin.IssueRequestState.Requesting)
                     {
                         EditorGUILayout.LabelField("LOADING ISSUES...");
                     }
                     else
                     {
-                        //TODO : make that once and just register to scene laoded/unloaded
-                        int sceneCount = UnityEngine.SceneManagement.SceneManager.sceneCount;
-                        string[] loadedSceneGUID = new string[sceneCount];
-                        for(int i = 0; i < sceneCount; ++i)
-                        {
-                            var scene = UnityEngine.SceneManagement.SceneManager.GetSceneAt(i);
-                            loadedSceneGUID[i] = AssetDatabase.AssetPathToGUID(scene.path);
-                        }
-
                         EditorGUILayout.BeginScrollView(scrollPosition);
 
                         //TODO : this is temp, replace with actual UI
@@ -82,7 +112,7 @@ public class BugReporterWindow : EditorWindow
                             EditorGUILayout.BeginVertical("box");
                             EditorGUILayout.BeginHorizontal();
                             EditorGUILayout.LabelField(issue.title, new GUIStyle("box"));
-                            if (issue.unityBTURL != "" && ArrayUtility.Contains(loadedSceneGUID, issue.sceneGUID) && GUILayout.Button("Go To"))
+                            if (issue.unityBTURL != "" && _currentLevelsIssues.Contains(issue) && GUILayout.Button("Go To"))
                             {
                                 var sceneView = GetWindow<SceneView>();
                                 sceneView.LookAt(issue.cameraPosition, issue.cameraRotation, issue.cameraDistance);
@@ -97,6 +127,17 @@ public class BugReporterWindow : EditorWindow
                     }
                 }
             }
+        }
+    }
+
+    void SceneGUI(SceneView view)
+    {
+        for(int i = 0; i < _currentLevelsIssues.Count; ++i)
+        {
+            var issue = _currentLevelsIssues[i];
+            Vector3 position = issue.cameraPosition - issue.cameraRotation * new Vector3(0, 0, issue.cameraDistance);
+
+            Handles.Label(position, iconeContent);
         }
     }
 }

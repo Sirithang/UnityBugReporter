@@ -139,8 +139,11 @@ namespace BugReporter
             switch (backendType)
             {
                 case BackendType.Github:
-                    _backend = new GithubBugReportBackend();
-                    _backend.Init();
+                    if (_backend == null)
+                    {
+                        _backend = new GithubBugReportBackend();
+                        _backend.Init();
+                    }
                     break;
                 case BackendType.None:
                         break;
@@ -149,22 +152,25 @@ namespace BugReporter
             settings.currentBackendType = backendType;
         }
 
-        public static void RequestIssues()
+        public static void RequestIssues(System.Action<List<IssueEntry>> receivedCallback)
         {
             _issueRequestState = IssueRequestState.Requesting;
-            backend.RequestIssues(IssueRequestFinished);
+            backend.RequestIssues(entries =>
+            {
+                _issues = entries;
+                _issueRequestState = IssueRequestState.Completed;
+                if(receivedCallback != null)
+                {
+                    receivedCallback(_issues);
+                }
+            }
+            );
         }
 
         [DidReloadScripts]
         static void ScriptReloaded()
         {
             LoadOrCreateSettings();
-        }
-
-        static void IssueRequestFinished(List<IssueEntry> entries)
-        {
-            _issues = entries;
-            _issueRequestState = IssueRequestState.Completed;
         }
 
         static void LoadOrCreateSettings()
