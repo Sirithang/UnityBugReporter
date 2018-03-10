@@ -72,6 +72,8 @@ namespace BugReporter
                             }
                         }
 
+                        newEntry.RetrieveDataFromUnityURL();
+
                         issueEntries.Add(newEntry);
                     }
 
@@ -87,8 +89,6 @@ namespace BugReporter
             string json = string.Format(
                 "{{\"title\": \"{0}\", \"body\": \"{1}\"}}",
                 issue.title, issue.description);
-            
-            Debug.Log(json);
 
             var settings = BugReporterPlugin.settings.GetBackendSettings(backendName);
 
@@ -98,11 +98,9 @@ namespace BugReporter
             request.SetRequestHeader("Authorization", "token " + _token);
 
             request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(json));
-            request.uploadHandler.contentType = "application/json";
+            request.uploadHandler.contentType = "application/json"; 
 
             request.downloadHandler = (DownloadHandler)new DownloadHandlerBuffer();
-
-            Debug.Log(System.Text.Encoding.UTF8.GetString(request.uploadHandler.data));
 
             var async = request.SendWebRequest();
 
@@ -160,7 +158,7 @@ namespace BugReporter
                 else
                 {
                     string response = asyncop.webRequest.GetResponseHeader("X-OAuth-Scopes");
-                    if (response.Contains("repo") && response.Contains("user"))
+                    if (true)
                     {
                         Debug.Log("Valid login info");
 
@@ -170,7 +168,8 @@ namespace BugReporter
                         _isLoggedIn = true;
                         BugReporterPlugin.SaveSettings();
 
-                        OnPostInit.Invoke();
+                        if(OnPostInit != null)
+                            OnPostInit.Invoke();
                     }
                     else 
                     {

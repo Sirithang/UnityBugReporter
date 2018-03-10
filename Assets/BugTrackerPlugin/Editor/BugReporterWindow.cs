@@ -64,6 +64,15 @@ public class BugReporterWindow : EditorWindow
                     }
                     else
                     {
+                        //TODO : make that once and just register to scene laoded/unloaded
+                        int sceneCount = UnityEngine.SceneManagement.SceneManager.sceneCount;
+                        string[] loadedSceneGUID = new string[sceneCount];
+                        for(int i = 0; i < sceneCount; ++i)
+                        {
+                            var scene = UnityEngine.SceneManagement.SceneManager.GetSceneAt(i);
+                            loadedSceneGUID[i] = AssetDatabase.AssetPathToGUID(scene.path);
+                        }
+
                         EditorGUILayout.BeginScrollView(scrollPosition);
 
                         //TODO : this is temp, replace with actual UI
@@ -71,7 +80,14 @@ public class BugReporterWindow : EditorWindow
                         {
                             var issue = BugReporterPlugin.issues[i];
                             EditorGUILayout.BeginVertical("box");
+                            EditorGUILayout.BeginHorizontal();
                             EditorGUILayout.LabelField(issue.title, new GUIStyle("box"));
+                            if (issue.unityBTURL != "" && ArrayUtility.Contains(loadedSceneGUID, issue.sceneGUID) && GUILayout.Button("Go To"))
+                            {
+                                var sceneView = GetWindow<SceneView>();
+                                sceneView.LookAt(issue.cameraPosition, issue.cameraRotation, issue.cameraDistance);
+                            }
+                            EditorGUILayout.EndHorizontal();
                             EditorGUILayout.LabelField(issue.description, new GUIStyle("box"));
                             EditorGUILayout.LabelField(issue.assignee, new GUIStyle("box"));
                             EditorGUILayout.EndVertical();

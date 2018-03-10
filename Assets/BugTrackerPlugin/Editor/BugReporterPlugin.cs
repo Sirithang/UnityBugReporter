@@ -37,6 +37,7 @@ namespace BugReporter
 
         //TODO : find somewhere else to store that
         private static Vector3 _bugReportCameraPos;
+        private static float _bugReportCameraDist;
         private static Quaternion _bugReportCameraRotation;
         private static string _bugReportSceneGUID;
 
@@ -52,10 +53,19 @@ namespace BugReporter
 
         static void Update(SceneView view)
         {
+            if (Event.current.type == EventType.KeyUp && Event.current.keyCode == KeyCode.F11)
+            {
+                Debug.Log(view.pivot);
+                Debug.Log(view.size);
+                Debug.Log(view.cameraDistance);
+            }
+
             if (Event.current.type == EventType.KeyUp && Event.current.keyCode == KeyCode.F12)
             {
-                _bugReportCameraPos = view.camera.transform.position;
-                _bugReportCameraRotation = view.camera.transform.rotation;
+
+                _bugReportCameraPos = view.pivot;
+                _bugReportCameraDist = view.cameraDistance;
+                _bugReportCameraRotation = view.rotation;
                 _bugReportSceneGUID = AssetDatabase.AssetPathToGUID(UnityEngine.SceneManagement.SceneManager.GetActiveScene().path);
 
                 OpenLogIssueWindow();
@@ -76,6 +86,7 @@ namespace BugReporter
             {
                 _bugReportCameraPos = Camera.main.transform.position;
                 _bugReportCameraRotation = Camera.main.transform.rotation;
+                _bugReportCameraDist = 0.001f;
                 _bugReportSceneGUID = AssetDatabase.AssetPathToGUID(UnityEngine.SceneManagement.SceneManager.GetActiveScene().path);
 
                 OpenLogIssueWindow();
@@ -113,6 +124,7 @@ namespace BugReporter
         {
             win.entry.cameraPosition = _bugReportCameraPos;
             win.entry.cameraRotation = _bugReportCameraRotation;
+            win.entry.cameraDistance = _bugReportCameraDist;
             win.entry.sceneGUID = _bugReportSceneGUID;
 
             win.entry.BuildUnityBTURL();
@@ -181,6 +193,7 @@ namespace BugReporter
             public string labels;
 
             public Vector3 cameraPosition;
+            public float cameraDistance;
             public Quaternion cameraRotation;
             public string sceneGUID;
 
@@ -188,19 +201,36 @@ namespace BugReporter
 
             public void BuildUnityBTURL()
             {
-                unityBTURL = string.Format("unitybt://{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}", cameraPosition.x, cameraPosition.y,
-                    cameraPosition.y, cameraRotation.x, cameraRotation.y, cameraRotation.z, cameraRotation.w,
+                unityBTURL = string.Format("unitybt://{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}", cameraPosition.x, cameraPosition.y,
+                    cameraPosition.z, cameraDistance, cameraRotation.x, cameraRotation.y, cameraRotation.z, cameraRotation.w,
                     sceneGUID);
             }
 
-            public void retrieveDataFromUnityURL()
+            //This will retireve info from the unitybt url insid ethe description and remove that from the description
+            public void RetrieveDataFromUnityURL()
             {
-                string pureData = unityBTURL.Replace("unity://", "");
+                int position = description.IndexOf("unitybt://");
+
+                if(position == -1)
+                {
+                    unityBTURL = "";
+                    return;
+                }
+
+                int end = description.IndexOf(' ', position);
+                if (end == -1)//if couldn't find a space after the url, assume it's cause the unitybt url is finishing the description
+                    end = description.Length;
+
+                unityBTURL = description.Substring(position, end - position);
+                description = description.Replace(unityBTURL, "");
+
+                string pureData = unityBTURL.Replace("unitybt://", "");
                 string[] data = pureData.Split('_');
 
                 cameraPosition = new Vector3(float.Parse(data[0]), float.Parse(data[1]), float.Parse(data[2]));
-                cameraRotation = new Quaternion(float.Parse(data[3]), float.Parse(data[4]), float.Parse(data[5]), float.Parse(data[6]));
-                sceneGUID = data[7];
+                cameraDistance = float.Parse(data[3]);
+                cameraRotation = new Quaternion(float.Parse(data[4]), float.Parse(data[5]), float.Parse(data[6]), float.Parse(data[7]));
+                sceneGUID = data[8];
             }
         }
     }
