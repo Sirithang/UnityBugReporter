@@ -6,6 +6,7 @@ using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Networking;
 
 namespace BugReporter
 {
@@ -29,7 +30,9 @@ namespace BugReporter
         public static BugReporterPluginSettings settings { get { return _settings; } }
         public static BugReporterBackend backend { get { return _backend; } }
         public static IssueRequestState issueRequestState {  get {  return _issueRequestState; } }
-        public static List<IssueEntry> issues { get { return _issues; } }
+
+        public static List<IssueEntry> issues { get { return _backend.issues; } }
+        public static List<UserEntry> users { get { return _backend.users; } }
 
         private static BugReporterBackend _backend;
         private static bool testValue = false;
@@ -42,8 +45,6 @@ namespace BugReporter
         private static string _bugReportSceneGUID;
 
         private static IssueRequestState _issueRequestState;
-
-        private static List<IssueEntry> _issues = new List<IssueEntry>();
 
         static BugReporterPlugin()
         {
@@ -99,6 +100,12 @@ namespace BugReporter
             SetupBackend(settings.currentBackendType);
         }
 
+        public static void SetProjectPath(string projectPath)
+        {
+            _backend.SetProjectPath(projectPath);
+            SaveSettings();
+        }
+
         public static void OpenLogIssueWindow()
         {
             if (_backend == null || !_backend.CanRequest())
@@ -128,6 +135,7 @@ namespace BugReporter
             win.entry.sceneGUID = _bugReportSceneGUID;
 
             win.entry.BuildUnityBTURL();
+            win.entry.BuildSemiColonStrings();
 
             win.entry.description += "\n\n" + win.entry.unityBTURL;
 
@@ -157,11 +165,10 @@ namespace BugReporter
             _issueRequestState = IssueRequestState.Requesting;
             backend.RequestIssues(entries =>
             {
-                _issues = entries;
                 _issueRequestState = IssueRequestState.Completed;
                 if(receivedCallback != null)
                 {
-                    receivedCallback(_issues);
+                    receivedCallback(entries);
                 }
             }
             );
@@ -193,10 +200,16 @@ namespace BugReporter
 
         public class IssueEntry
         {
+            //useful to store backend-specific id
+            public string id;
+
             public string title;
             public string description;
-            public string assignee;
-            public string labels;
+            public string assigneesString;
+            public string labelsString;
+
+            public UserEntry[] assignees = new UserEntry[0];
+            public string[] labels = new string[0];
 
             public Vector3 cameraPosition;
             public float cameraDistance;
@@ -204,6 +217,29 @@ namespace BugReporter
             public string sceneGUID;
 
             public string unityBTURL;
+
+            public void ParseSemiColonStrings()
+            {
+                string[] assigneeNames = assigneesString.Split(';');
+                assignees = new UserEntry[0];
+                for (int i = 0; i < assigneeNames.Length; ++i)
+                {
+                    var user = _backend.GetUserInfoByName(assigneeNames[i]);
+                    if (user != null)
+                        ArrayUtility.Add(ref assignees, user);
+                }
+
+                labels = labelsString.Split(';');
+            }
+
+            public void BuildSemiColonStrings()
+            {
+                assigneesString = "";
+                for (int i = 0; i < assignees.Length; ++i)
+                    assigneesString += assignees[i].name;
+
+                labelsString = string.Join(";", labels);
+            }
 
             public void BuildUnityBTURL()
             {
@@ -238,6 +274,13 @@ namespace BugReporter
                 cameraRotation = new Quaternion(float.Parse(data[4]), float.Parse(data[5]), float.Parse(data[6]), float.Parse(data[7]));
                 sceneGUID = data[8];
             }
+        }
+
+        public class UserEntry
+        {
+            //backend specific id
+            public string id;
+            public string name;
         }
     }
 
@@ -296,15 +339,26 @@ namespace BugReporter
 
     public abstract class BugReporterBackend
     {
+        protected List<BugReporterPlugin.UserEntry> _users = new List<BugReporterPlugin.UserEntry>();
+        protected List<BugReporterPlugin.IssueEntry> _issues = new List<BugReporterPlugin.IssueEntry>();
+
+        public List<BugReporterPlugin.UserEntry> users {  get { return _users; } }
+        public List<BugReporterPlugin.IssueEntry> issues { get { return _issues; } }
+
         //This will only be called once after init is done. You should check if "CanRequest()" return true first.
         //If it does, you can directly do what you need, otherwise, register to that callback.
         public System.Action OnPostInit;
 
         public abstract bool Init();
+        public abstract void SetProjectPath(string projectPath);
         public abstract bool CanRequest();
         public abstract string GetName();
         public abstract void RequestIssues(System.Action<List<BugReporterPlugin.IssueEntry>> requestFinishedCallback);
         public abstract void LogIssue(BugReporterPlugin.IssueEntry issue);
+
+        public abstract BugReporterPlugin.UserEntry GetCurrentUserInfo();
+        public abstract BugReporterPlugin.UserEntry GetUserInfoByID(string userID);
+        public abstract BugReporterPlugin.UserEntry GetUserInfoByName(string username);
     }
 
     public class LogIssueWindow : EditorWindow
@@ -330,8 +384,8 @@ namespace BugReporter
             entry.title = EditorGUILayout.TextField("Title", entry.title);
             EditorGUILayout.LabelField("Description");
             entry.description = EditorGUILayout.TextArea(entry.description, GUILayout.MinHeight((150)));
-            entry.assignee = EditorGUILayout.TextField("Assignee", entry.assignee);
-            entry.labels = EditorGUILayout.TextField("Labels", entry.labels);
+            entry.assigneesString = EditorGUILayout.TextField("Assignee", entry.assigneesString);
+            entry.labelsString = EditorGUILayout.TextField("Labels", entry.labelsString);
 
             EditorGUILayout.BeginHorizontal();
 

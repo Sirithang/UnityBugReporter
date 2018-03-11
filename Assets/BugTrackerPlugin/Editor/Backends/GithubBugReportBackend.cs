@@ -17,6 +17,8 @@ namespace BugReporter
         protected bool _isInit = false;
         protected bool _isLoggedIn = false;
         protected string _token = "";
+        protected int _userID;
+        protected BugReporterPlugin.UserEntry _userInfo;
 
         public override bool Init()
         {
@@ -33,6 +35,29 @@ namespace BugReporter
         public override bool CanRequest()
         {
             return _isLoggedIn;
+        }
+
+        public override BugReporterPlugin.UserEntry GetCurrentUserInfo()
+        {
+            return _userInfo;
+        }
+
+        public override BugReporterPlugin.UserEntry GetUserInfoByID(string userID)
+        {
+            return BugReporterPlugin.users.Find(user => { return user.id == userID; });
+        }
+
+        public override BugReporterPlugin.UserEntry GetUserInfoByName(string username)
+        {
+            return BugReporterPlugin.users.Find(user => { return user.name == username; });
+        }
+
+        public override void SetProjectPath(string projectPath)
+        {
+            var settings = BugReporterPlugin.settings.GetBackendSettings(backendName);
+            settings.projectPath = projectPath;
+
+            SetupProjectInfo();
         }
 
         public override void RequestIssues(Action<List<BugReporterPlugin.IssueEntry>> requestFinishedCallback)
@@ -54,9 +79,10 @@ namespace BugReporter
                 }
                 else
                 {
+                    _issues.Clear();
+
                     string newJson = "{ \"array\": " + asyncop.webRequest.downloadHandler.text + "}";
                     GithubIssueData[] issues = JsonUtility.FromJson<Wrapper<GithubIssueData>>(newJson).array;
-                    List<BugReporterPlugin.IssueEntry> issueEntries = new List<BugReporterPlugin.IssueEntry>();
                     Debug.LogFormat("Found {0} issues", issues.Length);
                     for (int i = 0; i < issues.Length; ++i)
                     {
@@ -64,20 +90,25 @@ namespace BugReporter
                         newEntry.title = issues[i].title;
                         newEntry.description = issues[i].body;
 
+                        newEntry.assignees = new BugReporterPlugin.UserEntry[0];
                         if (issues[i].assignees != null)
                         {
                             for (int j = 0; j < issues[i].assignees.Length; ++j)
                             {
-                                newEntry.assignee += issues[i].assignees[j].login + ";";
+                                //TODO : this is terrible. Use some dictionnary maybe or better typing to avoid so much silly conversion
+                                var userEntry = GetUserInfoByID(issues[i].assignees[j].id.ToString());
+                                if(userEntry != null)
+                                    ArrayUtility.Add(ref newEntry.assignees, userEntry);
                             }
                         }
 
                         newEntry.RetrieveDataFromUnityURL();
+                        newEntry.BuildSemiColonStrings();
 
-                        issueEntries.Add(newEntry);
+                        _issues.Add(newEntry);
                     }
 
-                    requestFinishedCallback(issueEntries);
+                    requestFinishedCallback(_issues);
                 }
             };
         }
@@ -141,7 +172,7 @@ namespace BugReporter
 
         protected void TryLogin(string password)
         {
-            var request = UnityWebRequest.Get(baseURL);
+            var request = UnityWebRequest.Get(baseURL+"/user");
             request.SetRequestHeader("Accept", "application/vnd.github.v3+json");
             request.SetRequestHeader("Authorization", "token " + password);
 
@@ -158,9 +189,11 @@ namespace BugReporter
                 else
                 {
                     string response = asyncop.webRequest.GetResponseHeader("X-OAuth-Scopes");
-                    if (true)
+                    if (response.Contains("repo"))
                     {
-                        Debug.Log("Valid login info");
+                       GithubUserData user = JsonUtility.FromJson<GithubUserData>(asyncop.webRequest.downloadHandler.text);
+
+                        _userID = user.id;
 
                         var setting = BugReporterPlugin.settings.GetBackendSettings(backendName);
                         setting.token = password;
@@ -168,13 +201,57 @@ namespace BugReporter
                         _isLoggedIn = true;
                         BugReporterPlugin.SaveSettings();
 
-                        if(OnPostInit != null)
+                        Debug.LogFormat("[Github Backend] : Logged in as user " + user.login);
+
+                        if (setting.projectPath != "")
+                            SetupProjectInfo();
+
+                        if (OnPostInit != null)
                             OnPostInit.Invoke();
                     }
                     else 
                     {
-                        Debug.LogError("invialid login info " + response);
+                        Debug.LogError("[Github Backend] : This Personal Access token don't have the repo access");
                         GetAuthToken();
+                    }
+                }
+            };
+        }
+
+        private void SetupProjectInfo()
+        {
+            var settings = BugReporterPlugin.settings.GetBackendSettings(backendName);
+            var request = UnityWebRequest.Get(baseURL + "/repos/" + settings.projectPath + "/assignees");
+            request.SetRequestHeader("Accept", "application/vnd.github.v3+json");
+            request.SetRequestHeader("Authorization", "token " + _token);
+
+            var async = request.SendWebRequest();
+
+            async.completed += op =>
+            {
+                UnityWebRequestAsyncOperation asyncop = op as UnityWebRequestAsyncOperation;
+                if (asyncop.webRequest.isHttpError)
+                {
+                    Debug.Log(asyncop.webRequest.error);
+                }
+                else
+                {
+                    _users.Clear();
+
+                    string newJson = "{ \"array\": " + asyncop.webRequest.downloadHandler.text + "}";
+                    GithubUserData[] usersData = JsonUtility.FromJson<Wrapper<GithubUserData>>(newJson).array;
+                    List<BugReporterPlugin.UserEntry> entries = new List<BugReporterPlugin.UserEntry>();
+                    Debug.LogFormat("Found {0} users in that project", usersData.Length);
+                    for (int i = 0; i < usersData.Length; ++i)
+                    {
+                        BugReporterPlugin.UserEntry entry = new BugReporterPlugin.UserEntry();
+                        entry.id = usersData[i].id.ToString();
+                        entry.name = usersData[i].login;
+
+                        if (usersData[i].id == _userID)
+                            _userInfo = entry;
+
+                        _users.Add(entry);
                     }
                 }
             };
@@ -186,14 +263,15 @@ namespace BugReporter
             public string title;
             public string body;
 
-            public UserIssueData user;
-            public UserIssueData[] assignees;
+            public GithubUserData user;
+            public GithubUserData[] assignees;
+        }
 
-            [System.Serializable]
-            public class UserIssueData
-            {
-                public string login;
-            }
+        [System.Serializable]
+        public class GithubUserData
+        {
+            public string login;
+            public int id;
         }
 
         [Serializable]
