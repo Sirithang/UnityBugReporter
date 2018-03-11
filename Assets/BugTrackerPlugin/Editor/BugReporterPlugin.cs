@@ -30,15 +30,22 @@ namespace BugReporter
         private static BugReporterBackend _backend;
         private static BugReporterPluginSettings _settings;
 
+        private static ImageUploader _imgUploader = null;
+
         private static Dictionary<string, BugReporterBackend> _registeredBackends = new Dictionary<string, BugReporterBackend>();
         //easier to query for a list of name that having to convert the keys from the dictionnary everytime
         private static string[] _backendsName = new string[0];
 
-        //TODO : find somewhere else to store that
+        private static Dictionary<string, ImageUploader> _registeredImageUploader = new Dictionary<string, ImageUploader>();
+        //easier to query for a list of name that having to convert the keys from the dictionnary everytime
+        private static string[] _imageUploaderName = new string[0];
+
+        //TODO : find somewhere else to store that maybe
         private static Vector3 _bugReportCameraPos;
         private static float _bugReportCameraDist;
         private static Quaternion _bugReportCameraRotation;
         private static string _bugReportSceneGUID;
+        private static byte[] _screenShot;
 
         private static IssueRequestState _issueRequestState;
 
@@ -56,6 +63,18 @@ namespace BugReporter
                 System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(t.TypeHandle);
             }
 
+            //find all possible imageUploader : 
+            subclasses =
+            from assembly in AppDomain.CurrentDomain.GetAssemblies()
+            from type in assembly.GetTypes()
+            where type.IsSubclassOf(typeof(ImageUploader))
+            select type;
+
+            foreach (var t in subclasses)
+            {
+                System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(t.TypeHandle);
+            }
+
             SceneView.onSceneGUIDelegate += Update;
             EditorApplication.playModeStateChanged += PlayModeChanged;
         }
@@ -66,6 +85,17 @@ namespace BugReporter
             ArrayUtility.Add(ref _backendsName, name);
         }
 
+        static public void RegisterImageUploader(string name, ImageUploader uploader)
+        {
+            _registeredImageUploader[name] = uploader;
+            ArrayUtility.Add(ref _imageUploaderName, name);
+        }
+
+        static public string[] GetImageUploaderName()
+        {
+            return _imageUploaderName;
+        }
+
         static public string[] GetBackendNameList()
         {
             return _backendsName;
@@ -73,13 +103,6 @@ namespace BugReporter
 
         static void Update(SceneView view)
         {
-            if (Event.current.type == EventType.KeyUp && Event.current.keyCode == KeyCode.F11)
-            {
-                Debug.Log(view.pivot);
-                Debug.Log(view.size);
-                Debug.Log(view.cameraDistance);
-            }
-
             if (Event.current.type == EventType.KeyUp && Event.current.keyCode == KeyCode.F12)
             {
 
@@ -88,8 +111,26 @@ namespace BugReporter
                 _bugReportCameraRotation = view.rotation;
                 _bugReportSceneGUID = AssetDatabase.AssetPathToGUID(UnityEngine.SceneManagement.SceneManager.GetActiveScene().path);
 
+                _screenShot = EncodeToPNG(view.camera.activeTexture);
+
                 OpenLogIssueWindow();
             }
+        }
+
+        static byte[] EncodeToPNG(RenderTexture rt)
+        {
+            Texture2D tex;
+
+            if(rt == null)
+                tex = new Texture2D(Screen.width, Screen.height, TextureFormat.RGBA32, false);
+            else
+                tex = new Texture2D(rt.width, rt.height, TextureFormat.RGBA32, false);
+
+            RenderTexture.active = rt;
+            tex.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0);
+            tex.Apply();
+
+            return ImageConversion.EncodeToPNG(tex);
         }
 
         static void PlayModeChanged(PlayModeStateChange stateChanged)
@@ -109,6 +150,8 @@ namespace BugReporter
                 _bugReportCameraDist = 0.001f;
                 _bugReportSceneGUID = AssetDatabase.AssetPathToGUID(UnityEngine.SceneManagement.SceneManager.GetActiveScene().path);
 
+                _screenShot = EncodeToPNG(Camera.main.activeTexture);
+
                 OpenLogIssueWindow();
             }
         }
@@ -117,6 +160,7 @@ namespace BugReporter
         {
             _issueRequestState = IssueRequestState.Empty;
             SetupBackend(settings.currentBackendType);
+            SetupImageUploader(settings.currentImageUploader);
         }
 
         public static void SetProjectPath(string projectPath)
@@ -142,23 +186,51 @@ namespace BugReporter
                 return;
             }
 
-            var win = EditorWindow.GetWindow<LogIssueWindow>();
+            var win = EditorWindow.GetWindow<BugReportWindow>();
             win.onWindowClosed = LogIssueWindowClosed;
         }
 
-        public static void LogIssueWindowClosed(LogIssueWindow win)
+        public static void LogIssueWindowClosed(BugReportWindow win)
         {
             win.entry.cameraPosition = _bugReportCameraPos;
             win.entry.cameraRotation = _bugReportCameraRotation;
             win.entry.cameraDistance = _bugReportCameraDist;
             win.entry.sceneGUID = _bugReportSceneGUID;
 
-            win.entry.BuildUnityBTURL();
+            if (win.logPosition)
+                win.entry.BuildUnityBTURL();
+            else
+                win.entry.unityBTURL = "";
+
             win.entry.BuildSemiColonStrings();
 
-            win.entry.description += "\n\n" + win.entry.unityBTURL;
+            if (win.uploadScreenshot)
+            {
+                _imgUploader.UploadFile(_screenShot, (valid, url) =>
+                {
+                    if (valid)
+                    {
+                        win.entry.description += string.Format("\n\n![Screenshot]({0})", url);
+                    }
+                    else
+                    {
+                        Debug.LogError("Upload of screenshot failed, logging without the picture");
+                    }
 
-            _backend.LogIssue(win.entry);
+                    if (win.logPosition)
+                        win.entry.description += "\n\n" + win.entry.unityBTURL;
+
+                    _backend.LogIssue(win.entry);
+                });
+
+            }
+            else
+            {
+                if (win.logPosition)
+                    win.entry.description += "\n\n" + win.entry.unityBTURL;
+
+                _backend.LogIssue(win.entry);
+            }
         }
 
         public static void SetupBackend(string backendType)
@@ -169,6 +241,8 @@ namespace BugReporter
             if(!_registeredBackends.ContainsKey(backendType))
             {
                 Debug.LogError("Couldn't find a backend with the name " + backendType);
+                settings.currentBackendType = "";
+                SaveSettings();
                 return;
             }
 
@@ -176,6 +250,25 @@ namespace BugReporter
             _backend.Init();
 
             settings.currentBackendType = backendType;
+        }
+
+        public static void SetupImageUploader(string imageUploaderType)
+        {
+            if (imageUploaderType == "")
+                return;
+
+            if (!_registeredImageUploader.ContainsKey(imageUploaderType))
+            {
+                Debug.LogError("Couldn't find a image uploaded with the name " + imageUploaderType);
+                settings.currentImageUploader = "";
+                SaveSettings();
+                return;
+            }
+
+            _imgUploader = _registeredImageUploader[imageUploaderType];
+
+            settings.currentImageUploader = imageUploaderType;
+            SaveSettings();
         }
 
         public static void RequestIssues(System.Action<List<IssueEntry>> receivedCallback, IssueFilter filter)
@@ -335,7 +428,7 @@ namespace BugReporter
     [System.Serializable]
     public class BugReporterPluginSettings : ISerializationCallbackReceiver
     {
-        //so most class nesting, may need to clean that...
+        //so many class nesting, may need to clean that...
         [System.Serializable]
         public class BackendSetting
         {
@@ -343,9 +436,17 @@ namespace BugReporter
             public string projectPath = "";
         }
 
+        [System.Serializable]
+        public class ImageUploaderSetting
+        {
+            public string authentification = "";
+        }
+
         public string currentBackendType = "";
+        public string currentImageUploader = "";
 
         protected Dictionary<string, BackendSetting> _loginTokens = new Dictionary<string, BackendSetting>();
+        protected Dictionary<string, ImageUploaderSetting> _imgUploaderSettings = new Dictionary<string, ImageUploaderSetting>();
 
         //Will add a new setting with that backendName if does not exist
         public BackendSetting GetBackendSettings(string backendName)
@@ -358,11 +459,27 @@ namespace BugReporter
             return _loginTokens[backendName];
         }
 
+        //Will add a new setting with that imageUploaderName if does not exist
+        public ImageUploaderSetting GetImageUploaderSetting(string imageUploaderName)
+        {
+            if (!_imgUploaderSettings.ContainsKey(imageUploaderName))
+            {
+                _imgUploaderSettings[imageUploaderName] = new ImageUploaderSetting();
+            }
+
+            return _imgUploaderSettings[imageUploaderName];
+        }
+
         // serialization
         [SerializeField]
         protected List<string> _loginTokenKeys = new List<string>();
         [SerializeField]
         protected List<BackendSetting> _loginTokenValues = new List<BackendSetting>();
+
+        [SerializeField]
+        protected List<string> _imgUploaderKeys = new List<string>();
+        [SerializeField]
+        protected List<ImageUploaderSetting> _imgUploaderValues = new List<ImageUploaderSetting>();
 
         public void OnAfterDeserialize()
         {
@@ -370,6 +487,12 @@ namespace BugReporter
             for (int i = 0; i < _loginTokenKeys.Count; ++i)
             {
                 _loginTokens[_loginTokenKeys[i]] = _loginTokenValues[i];
+            }
+
+            _imgUploaderSettings = new Dictionary<string, ImageUploaderSetting>();
+            for(int  i = 0; i < _imgUploaderKeys.Count; ++i)
+            {
+                _imgUploaderSettings[_imgUploaderKeys[i]] = _imgUploaderValues[i];
             }
         }
 
@@ -382,119 +505,22 @@ namespace BugReporter
                 _loginTokenKeys.Add(pair.Key);
                 _loginTokenValues.Add(pair.Value);
             }
+
+            _imgUploaderKeys = new List<string>();
+            _imgUploaderValues = new List<ImageUploaderSetting>();
+            foreach(var pair in _imgUploaderSettings)
+            {
+                _imgUploaderKeys.Add(pair.Key);
+                _imgUploaderValues.Add(pair.Value);
+            }
         }
     }
 
-    public class LogIssueWindow : EditorWindow
+    //Subclass that to write an image uploader.
+    public abstract class ImageUploader
     {
-        public BugReporterPlugin.IssueEntry entry;
-
-        public System.Action<LogIssueWindow> onWindowClosed;
-
-        private float timeScaleSaved;
-
-        private void OnEnable()
-        {
-            entry = new BugReporterPlugin.IssueEntry();
-            if (Application.isPlaying)
-            {
-                timeScaleSaved = Time.timeScale;
-                Time.timeScale = 0;
-            }
-        }
-
-        void ToggleUserAssignee(object data)
-        {
-            BugReporterPlugin.UserEntry user = data as BugReporterPlugin.UserEntry;
-
-            if (ArrayUtility.Contains(entry.assignees, user))
-            {
-                ArrayUtility.Remove(ref entry.assignees, user);
-            }
-            else
-            {
-                ArrayUtility.Add(ref entry.assignees, user);
-            }
-
-            entry.BuildSemiColonStrings();
-        }
-
-        void ToggleLabel(object data)
-        {
-            string label = data as string;
-
-            if (ArrayUtility.Contains(entry.labels, label))
-            {
-                ArrayUtility.Remove(ref entry.labels, label);
-            }
-            else
-            {
-                ArrayUtility.Add(ref entry.labels, label);
-            }
-
-            entry.BuildSemiColonStrings();
-        }
-
-        private void OnGUI()
-        {
-            entry.title = EditorGUILayout.TextField("Title", entry.title);
-            EditorGUILayout.LabelField("Description");
-            entry.description = EditorGUILayout.TextArea(entry.description, GUILayout.MinHeight((150)));
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.PrefixLabel("Assignees");
-            if(EditorGUILayout.DropdownButton(new GUIContent(entry.assigneesString), FocusType.Keyboard))
-            {
-                GenericMenu menu = new GenericMenu();
-
-                var users = BugReporterPlugin.users;
-                foreach(var user in users)
-                {
-                    menu.AddItem(new GUIContent(user.name), ArrayUtility.Contains(entry.assignees, user), ToggleUserAssignee, user);
-                }
-
-                menu.ShowAsContext();
-            }
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.PrefixLabel("Labels");
-            if (EditorGUILayout.DropdownButton(new GUIContent(entry.labelsString), FocusType.Keyboard))
-            {
-                GenericMenu menu = new GenericMenu();
-
-                var labels = BugReporterPlugin.labels;
-                foreach (var label in labels)
-                {
-                    menu.AddItem(new GUIContent(label), ArrayUtility.Contains(entry.labels, label), ToggleLabel, label);
-                }
-
-                menu.ShowAsContext();
-            }
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.BeginHorizontal();
-
-            if (GUILayout.Button("Send"))
-            {
-                onWindowClosed(this);
-                Close();
-            }
-
-            if (GUILayout.Button("Cancel"))
-            {
-                Close();
-            }
-
-            EditorGUILayout.EndHorizontal();
-        }
-
-        private void OnDisable()
-        {
-            if (Application.isPlaying)
-            {
-                Time.timeScale = timeScaleSaved;
-            }
-        }
+        //should upload the image and call onUploadFinished when done.
+        //1st param must be true if upload succeed false otherwise, 2nd param is link to picture if succeed
+        public abstract void UploadFile(byte[] data, System.Action<bool, string> onUploadFinished);
     }
 }
