@@ -106,12 +106,13 @@ public class BugTrackerWindow : EditorWindow
 
     private void OnGUI()
     {
-        if (BugReporterPlugin.settings.currentBackendType == BugReporterPlugin.BackendType.None)
+        if (BugReporterPlugin.settings.currentBackendType == "")
         {
-            BugReporterPlugin.BackendType selected = (BugReporterPlugin.BackendType)EditorGUILayout.EnumPopup("Backend", BugReporterPlugin.settings.currentBackendType);
-            if (selected != BugReporterPlugin.settings.currentBackendType)
+            string[] backendNames = BugReporterPlugin.GetBackendNameList();
+            int selected = EditorGUILayout.Popup("Backend", -1, backendNames);
+            if (selected != -1)
             {
-                BugReporterPlugin.SetupBackend(selected);
+                BugReporterPlugin.SetupBackend(backendNames[selected]);
                 BugReporterPlugin.SaveSettings();
             }
         }
@@ -223,7 +224,6 @@ public class BugTrackerWindow : EditorWindow
                                 EditorGUILayout.Space();
 
                                 string assigneesList = "Assignees : ";
-                                bool assignedToSelf = false;
 
                                 if(issue.assignees.Length == 0)
                                 {
@@ -232,17 +232,10 @@ public class BugTrackerWindow : EditorWindow
                                 else
                                 {
                                     assigneesList += issue.assigneesString;
-                                    assignedToSelf = ArrayUtility.Contains(issue.assignees, BugReporterPlugin.backend.GetCurrentUserInfo());
                                 }
 
                                 EditorGUILayout.BeginHorizontal();
                                 EditorGUILayout.LabelField(assigneesList);
-
-                                //TODO : modification to assign the issue to self directly from editor. May help.
-                                //if(!assignedToSelf && GUILayout.Button("Assign to me"))
-                                //{
-
-                                //}
                                 EditorGUILayout.EndHorizontal();
 
                                 EditorGUILayout.EndVertical();

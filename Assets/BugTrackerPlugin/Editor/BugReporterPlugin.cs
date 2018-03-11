@@ -1,24 +1,16 @@
-﻿using System.Collections;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection.Emit;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.Callbacks;
-using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.Networking;
 
 namespace BugReporter
 {
     public class BugReporterPlugin
     {
         static readonly string configFilePath = "/../Library/BugTrackerSettings.json";
-
-        public enum BackendType
-        {
-            None,
-            Github
-        }
 
         public enum IssueRequestState
         {
@@ -29,15 +21,18 @@ namespace BugReporter
 
         public static BugReporterPluginSettings settings { get { return _settings; } }
         public static BugReporterBackend backend { get { return _backend; } }
-        public static IssueRequestState issueRequestState {  get {  return _issueRequestState; } }
+        public static IssueRequestState issueRequestState { get { return _issueRequestState; } }
 
         public static List<IssueEntry> issues { get { return _backend.issues; } }
         public static List<UserEntry> users { get { return _backend.users; } }
         public static List<string> labels { get { return _backend.labels; } }
 
         private static BugReporterBackend _backend;
-        private static bool testValue = false;
         private static BugReporterPluginSettings _settings;
+
+        private static Dictionary<string, BugReporterBackend> _registeredBackends = new Dictionary<string, BugReporterBackend>();
+        //easier to query for a list of name that having to convert the keys from the dictionnary everytime
+        private static string[] _backendsName = new string[0];
 
         //TODO : find somewhere else to store that
         private static Vector3 _bugReportCameraPos;
@@ -49,8 +44,31 @@ namespace BugReporter
 
         static BugReporterPlugin() 
         {
+            //find all possible backend : 
+            var subclasses =
+            from assembly in AppDomain.CurrentDomain.GetAssemblies()
+            from type in assembly.GetTypes()
+            where type.IsSubclassOf(typeof(BugReporterBackend))
+            select type;
+
+            foreach(var t in subclasses)
+            {
+                System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(t.TypeHandle);
+            }
+
             SceneView.onSceneGUIDelegate += Update;
             EditorApplication.playModeStateChanged += PlayModeChanged;
+        }
+
+        static public void RegisterBackend(string name, BugReporterBackend backend)
+        {
+            _registeredBackends[name] = backend;
+            ArrayUtility.Add(ref _backendsName, name);
+        }
+
+        static public string[] GetBackendNameList()
+        {
+            return _backendsName;
         }
 
         static void Update(SceneView view)
@@ -143,20 +161,19 @@ namespace BugReporter
             _backend.LogIssue(win.entry);
         }
 
-        public static void SetupBackend(BackendType backendType)
+        public static void SetupBackend(string backendType)
         {
-            switch (backendType)
+            if (backendType == "")
+                return;
+
+            if(!_registeredBackends.ContainsKey(backendType))
             {
-                case BackendType.Github:
-                    if (_backend == null)
-                    {
-                        _backend = new GithubBugReportBackend();
-                        _backend.Init();
-                    }
-                    break;
-                case BackendType.None:
-                        break;
+                Debug.LogError("Couldn't find a backend with the name " + backendType);
+                return;
             }
+
+            _backend = _registeredBackends[backendType];
+            _backend.Init();
 
             settings.currentBackendType = backendType;
         }
@@ -174,6 +191,16 @@ namespace BugReporter
             },
             filter
             );
+        }
+
+        public static UserEntry GetUserInfoByID(string userID)
+        {
+            return users.Find(user => { return user.id == userID; });
+        }
+
+        public static UserEntry GetUserInfoByName(string username)
+        {
+            return users.Find(user => { return user.name == username; });
         }
 
         [DidReloadScripts]
@@ -245,7 +272,7 @@ namespace BugReporter
                 assignees = new UserEntry[0];
                 for (int i = 0; i < assigneeNames.Length; ++i)
                 {
-                    var user = _backend.GetUserInfoByName(assigneeNames[i]);
+                    var user = GetUserInfoByName(assigneeNames[i]);
                     if (user != null)
                         ArrayUtility.Add(ref assignees, user);
                 }
@@ -316,7 +343,7 @@ namespace BugReporter
             public string projectPath = "";
         }
 
-        public BugReporterPlugin.BackendType currentBackendType = BugReporterPlugin.BackendType.None;
+        public string currentBackendType = "";
 
         protected Dictionary<string, BackendSetting> _loginTokens = new Dictionary<string, BackendSetting>();
 

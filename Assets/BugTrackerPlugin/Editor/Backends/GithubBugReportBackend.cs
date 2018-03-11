@@ -9,7 +9,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 
 namespace BugReporter
-{
+{ 
     public class GithubBugReportBackend : BugReporterBackend
     {
         private static readonly string backendName = "github";
@@ -21,11 +21,17 @@ namespace BugReporter
         protected int _userID;
         protected BugReporterPlugin.UserEntry _userInfo;
 
-        public override bool Init()
+
+        // /!\ Don't forget to add a static constructor to register the backend !!
+        static GithubBugReportBackend()
+        {
+            BugReporterPlugin.RegisterBackend(backendName, new GithubBugReportBackend());
+        }
+
+        public override void Init()
         {
             _isLoggedIn = false;
             GetAuthToken();
-            return true;
         }
 
         public override string GetName()
@@ -36,21 +42,6 @@ namespace BugReporter
         public override bool CanRequest()
         {
             return _isLoggedIn;
-        }
-
-        public override BugReporterPlugin.UserEntry GetCurrentUserInfo()
-        {
-            return _userInfo;
-        }
-
-        public override BugReporterPlugin.UserEntry GetUserInfoByID(string userID)
-        {
-            return BugReporterPlugin.users.Find(user => { return user.id == userID; });
-        }
-
-        public override BugReporterPlugin.UserEntry GetUserInfoByName(string username)
-        {
-            return BugReporterPlugin.users.Find(user => { return user.name == username; });
         }
 
         public override void SetProjectPath(string projectPath)
@@ -110,7 +101,7 @@ namespace BugReporter
                             for (int j = 0; j < issues[i].assignees.Length; ++j)
                             {
                                 //TODO : this is terrible. Use some dictionnary maybe or better typing to avoid so much silly conversion
-                                var userEntry = GetUserInfoByID(issues[i].assignees[j].id.ToString());
+                                var userEntry = BugReporterPlugin.GetUserInfoByID(issues[i].assignees[j].id.ToString());
                                 if(userEntry != null)
                                     ArrayUtility.Add(ref newEntry.assignees, userEntry);
                             }
@@ -341,30 +332,30 @@ namespace BugReporter
         [System.Serializable]
         class GithubIssueData
         {
-            public string title;
-            public string body;
+            public string title = "";
+            public string body = "";
 
-            public GithubUserData user;
-            public GithubUserData[] assignees;
+            public GithubUserData user = null;
+            public GithubUserData[] assignees = new GithubUserData[0];
         }
 
         [System.Serializable]
         public class GithubUserData
         {
-            public string login;
-            public int id;
+            public string login = "";
+            public int id = -1;
         }
 
         [System.Serializable]
         public class GithubLabel
         {
-            public string name;
+            public string name = "";
         }
 
         [Serializable]
         private class Wrapper<T>
         {
-            public T[] array;
+            public T[] array = null;
         }
     }
 
