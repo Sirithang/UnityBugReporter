@@ -35,6 +35,10 @@ of the scene in which the editor was when F12 was pressed.
 Used by the system to display the position of the bug in editor & auto move to
 that position through the bug list.
 
+## Image uploading
+
+For now, only an imgur uploader is written, it require an imgur application Client ID (see imgur for how to get one)
+
 ### Note on saved settings
 
 Settings are saved in the Library folder, as the Personal Access token is written in plain there, so it won't be commited to the repo
@@ -45,5 +49,6 @@ That mean pulling the repo somewhere else or deleting the Library folder will ne
 - [X] parse unitybt url & use that in editor to move to that place
 - [X] display issue with a unitybt link in the sceneview where they were taken.
 - [X] offer way to filter before pulling issues
+- [X] can upload screenshot with bug filling (need more image service uploading)?
 - [ ] write more backend (gitlab to start)
 - [ ] automate creating the OAuth using github login/password
