@@ -15,6 +15,8 @@ public class BugTrackerWindow : EditorWindow
     private GUIStyle _entryHeaderStyle;
     private GUIStyle _entryDescriptionStyle;
 
+    private BugReporterPlugin.IssueFilter _filter = new BugReporterPlugin.IssueFilter();
+
     private List<BugReporterPlugin.IssueEntry> _currentLevelsIssues = new List<BugReporterPlugin.IssueEntry>();
 
     [MenuItem("Bug Tracker/Open")]
@@ -34,10 +36,10 @@ public class BugTrackerWindow : EditorWindow
 
         BugReporterPlugin.Init();
 
-        if(BugReporterPlugin.backend != null && BugReporterPlugin.backend.CanRequest())
-        {
-            BugReporterPlugin.RequestIssues(ReceivedIssues);
-        }
+        //if(BugReporterPlugin.backend != null && BugReporterPlugin.backend.CanRequest())
+        //{
+        //    BugReporterPlugin.RequestIssues(ReceivedIssues);
+        //}
 
         iconeContent = new GUIContent(EditorGUIUtility.Load("BugIcone.png") as Texture2D);
         iconeSelectedContent = new GUIContent(EditorGUIUtility.Load("BugIcone_Selected.png") as Texture2D);
@@ -81,6 +83,27 @@ public class BugTrackerWindow : EditorWindow
         Repaint();
     }
 
+    void ToggleUserFilter(object user)
+    {
+        _filter.user = user as BugReporterPlugin.UserEntry;
+    }
+
+    void ToggleLabelFilter(object data)
+    {
+        string label = data as string;
+
+        if (ArrayUtility.Contains(_filter.labels, label))
+        {
+            ArrayUtility.Remove(ref _filter.labels, label);
+        }
+        else
+        {
+            ArrayUtility.Add(ref _filter.labels, label);
+        }
+
+        _filter.BuildLabelCommaString();
+    }
+
     private void OnGUI()
     {
         if (BugReporterPlugin.settings.currentBackendType == BugReporterPlugin.BackendType.None)
@@ -108,43 +131,63 @@ public class BugTrackerWindow : EditorWindow
             }
             else
             {
-                EditorGUILayout.BeginHorizontal();
                 if (GUILayout.Button("Change project path"))
                     backendSetting.projectPath = "";
-                if (BugReporterPlugin.backend.CanRequest() && GUILayout.Button("Referesh issues"))
+
+                EditorGUILayout.PrefixLabel("Filters");
+
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.PrefixLabel("Assignee");
+                if (EditorGUILayout.DropdownButton(new GUIContent(_filter.user != null ? _filter.user.name : "Anyone"), FocusType.Keyboard))
                 {
-                    BugReporterPlugin.RequestIssues(ReceivedIssues);
+                    GenericMenu menu = new GenericMenu();
+
+                    menu.AddItem(new GUIContent("Anyone"), _filter.user == null, ToggleUserFilter, null);
+
+                    var users = BugReporterPlugin.users;
+                    foreach (var user in users)
+                    {
+                        menu.AddItem(new GUIContent(user.name), _filter.user == user, ToggleUserFilter, user);
+                    }
+
+                    menu.ShowAsContext();
                 }
                 EditorGUILayout.EndHorizontal();
 
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.PrefixLabel("Labels");
+                if (EditorGUILayout.DropdownButton(new GUIContent(_filter.labelCommaString), FocusType.Keyboard))
+                {
+                    GenericMenu menu = new GenericMenu();
+
+                    var labels = BugReporterPlugin.labels;
+                    foreach (var label in labels)
+                    {
+                        menu.AddItem(new GUIContent(label), ArrayUtility.Contains(_filter.labels, label), ToggleLabelFilter, label);
+                    }
+
+                    menu.ShowAsContext();
+                }
+                EditorGUILayout.EndHorizontal();
+
+                if (BugReporterPlugin.backend.CanRequest() && GUILayout.Button("Referesh issues"))
+                {
+                    BugReporterPlugin.RequestIssues(ReceivedIssues, _filter);
+                }
+
                 if (BugReporterPlugin.backend.CanRequest())
                 {
-                    if (BugReporterPlugin.issueRequestState == BugReporterPlugin.IssueRequestState.Empty)
-                        BugReporterPlugin.RequestIssues(ReceivedIssues);
-                    else if (BugReporterPlugin.issueRequestState == BugReporterPlugin.IssueRequestState.Requesting)
+                    if (BugReporterPlugin.issueRequestState == BugReporterPlugin.IssueRequestState.Requesting)
                     {
                         EditorGUILayout.LabelField("LOADING ISSUES...");
                     }
-                    else
+                    else if(BugReporterPlugin.issueRequestState == BugReporterPlugin.IssueRequestState.Completed)
                     {
                         EditorGUILayout.BeginScrollView(scrollPosition);
 
-                        //TODO : this is temp, replace with actual UI
                         for (int i = 0; i < BugReporterPlugin.issues.Count; ++i)
                         {
                             var issue = BugReporterPlugin.issues[i];
-                            //EditorGUILayout.BeginVertical("box");
-                            //EditorGUILayout.BeginHorizontal();
-                            //EditorGUILayout.LabelField(issue.title, new GUIStyle("box"));
-                            //if (issue.unityBTURL != "" && _currentLevelsIssues.Contains(issue) && GUILayout.Button("Go To"))
-                            //{
-                            //    var sceneView = GetWindow<SceneView>();
-                            //    sceneView.LookAt(issue.cameraPosition, issue.cameraRotation, issue.cameraDistance);
-                            //}
-                            //EditorGUILayout.EndHorizontal();
-                            //EditorGUILayout.LabelField(issue.description, new GUIStyle("box"));
-                            //EditorGUILayout.LabelField(issue.assignee, new GUIStyle("box"));
-                            //EditorGUILayout.EndVertical();
 
                             bool canGoTo = issue.unityBTURL != "" && _currentLevelsIssues.Contains(issue);
 
@@ -194,10 +237,12 @@ public class BugTrackerWindow : EditorWindow
 
                                 EditorGUILayout.BeginHorizontal();
                                 EditorGUILayout.LabelField(assigneesList);
-                                if(!assignedToSelf && GUILayout.Button("Assign to me"))
-                                {
 
-                                }
+                                //TODO : modification to assign the issue to self directly from editor. May help.
+                                //if(!assignedToSelf && GUILayout.Button("Assign to me"))
+                                //{
+
+                                //}
                                 EditorGUILayout.EndHorizontal();
 
                                 EditorGUILayout.EndVertical();

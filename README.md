@@ -44,7 +44,6 @@ That mean pulling the repo somewhere else or deleting the Library folder will ne
 
 - [X] parse unitybt url & use that in editor to move to that place
 - [X] display issue with a unitybt link in the sceneview where they were taken.
-- [ ] Setup way to assign bug from inside the editor
-- [ ] offer way to filter before pulling issues (pull everything for now, huge issues number will prob. cause bad perf)
+- [X] offer way to filter before pulling issues
 - [ ] write more backend (gitlab to start)
 - [ ] automate creating the OAuth using github login/password

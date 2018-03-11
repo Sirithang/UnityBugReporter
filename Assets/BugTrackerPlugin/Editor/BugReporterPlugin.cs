@@ -33,6 +33,7 @@ namespace BugReporter
 
         public static List<IssueEntry> issues { get { return _backend.issues; } }
         public static List<UserEntry> users { get { return _backend.users; } }
+        public static List<string> labels { get { return _backend.labels; } }
 
         private static BugReporterBackend _backend;
         private static bool testValue = false;
@@ -46,7 +47,7 @@ namespace BugReporter
 
         private static IssueRequestState _issueRequestState;
 
-        static BugReporterPlugin()
+        static BugReporterPlugin() 
         {
             SceneView.onSceneGUIDelegate += Update;
             EditorApplication.playModeStateChanged += PlayModeChanged;
@@ -160,7 +161,7 @@ namespace BugReporter
             settings.currentBackendType = backendType;
         }
 
-        public static void RequestIssues(System.Action<List<IssueEntry>> receivedCallback)
+        public static void RequestIssues(System.Action<List<IssueEntry>> receivedCallback, IssueFilter filter)
         {
             _issueRequestState = IssueRequestState.Requesting;
             backend.RequestIssues(entries =>
@@ -170,7 +171,8 @@ namespace BugReporter
                 {
                     receivedCallback(entries);
                 }
-            }
+            },
+            filter
             );
         }
 
@@ -196,6 +198,25 @@ namespace BugReporter
         public static void SaveSettings()
         {
             File.WriteAllText(Application.dataPath + configFilePath, JsonUtility.ToJson(_settings));
+        }
+
+        public class IssueFilter
+        {
+            public UserEntry user = null;
+            public string[] labels = new string[0];
+
+            public string labelCommaString = "";
+
+            public void BuildLabelCommaString()
+            {
+                labelCommaString = "";
+                for(int i = 0; i < labels.Length; ++i)
+                {
+                    labelCommaString += labels[i];
+                    if (i != labels.Length - 1)
+                        labelCommaString += ",";
+                }
+            }
         }
 
         public class IssueEntry
@@ -236,7 +257,7 @@ namespace BugReporter
             {
                 assigneesString = "";
                 for (int i = 0; i < assignees.Length; ++i)
-                    assigneesString += assignees[i].name;
+                    assigneesString += assignees[i].name + ((i == assignees.Length - 1) ? "" : ";");
 
                 labelsString = string.Join(";", labels);
             }
@@ -337,30 +358,6 @@ namespace BugReporter
         }
     }
 
-    public abstract class BugReporterBackend
-    {
-        protected List<BugReporterPlugin.UserEntry> _users = new List<BugReporterPlugin.UserEntry>();
-        protected List<BugReporterPlugin.IssueEntry> _issues = new List<BugReporterPlugin.IssueEntry>();
-
-        public List<BugReporterPlugin.UserEntry> users {  get { return _users; } }
-        public List<BugReporterPlugin.IssueEntry> issues { get { return _issues; } }
-
-        //This will only be called once after init is done. You should check if "CanRequest()" return true first.
-        //If it does, you can directly do what you need, otherwise, register to that callback.
-        public System.Action OnPostInit;
-
-        public abstract bool Init();
-        public abstract void SetProjectPath(string projectPath);
-        public abstract bool CanRequest();
-        public abstract string GetName();
-        public abstract void RequestIssues(System.Action<List<BugReporterPlugin.IssueEntry>> requestFinishedCallback);
-        public abstract void LogIssue(BugReporterPlugin.IssueEntry issue);
-
-        public abstract BugReporterPlugin.UserEntry GetCurrentUserInfo();
-        public abstract BugReporterPlugin.UserEntry GetUserInfoByID(string userID);
-        public abstract BugReporterPlugin.UserEntry GetUserInfoByName(string username);
-    }
-
     public class LogIssueWindow : EditorWindow
     {
         public BugReporterPlugin.IssueEntry entry;
@@ -379,13 +376,75 @@ namespace BugReporter
             }
         }
 
+        void ToggleUserAssignee(object data)
+        {
+            BugReporterPlugin.UserEntry user = data as BugReporterPlugin.UserEntry;
+
+            if (ArrayUtility.Contains(entry.assignees, user))
+            {
+                ArrayUtility.Remove(ref entry.assignees, user);
+            }
+            else
+            {
+                ArrayUtility.Add(ref entry.assignees, user);
+            }
+
+            entry.BuildSemiColonStrings();
+        }
+
+        void ToggleLabel(object data)
+        {
+            string label = data as string;
+
+            if (ArrayUtility.Contains(entry.labels, label))
+            {
+                ArrayUtility.Remove(ref entry.labels, label);
+            }
+            else
+            {
+                ArrayUtility.Add(ref entry.labels, label);
+            }
+
+            entry.BuildSemiColonStrings();
+        }
+
         private void OnGUI()
         {
             entry.title = EditorGUILayout.TextField("Title", entry.title);
             EditorGUILayout.LabelField("Description");
             entry.description = EditorGUILayout.TextArea(entry.description, GUILayout.MinHeight((150)));
-            entry.assigneesString = EditorGUILayout.TextField("Assignee", entry.assigneesString);
-            entry.labelsString = EditorGUILayout.TextField("Labels", entry.labelsString);
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.PrefixLabel("Assignees");
+            if(EditorGUILayout.DropdownButton(new GUIContent(entry.assigneesString), FocusType.Keyboard))
+            {
+                GenericMenu menu = new GenericMenu();
+
+                var users = BugReporterPlugin.users;
+                foreach(var user in users)
+                {
+                    menu.AddItem(new GUIContent(user.name), ArrayUtility.Contains(entry.assignees, user), ToggleUserAssignee, user);
+                }
+
+                menu.ShowAsContext();
+            }
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.PrefixLabel("Labels");
+            if (EditorGUILayout.DropdownButton(new GUIContent(entry.labelsString), FocusType.Keyboard))
+            {
+                GenericMenu menu = new GenericMenu();
+
+                var labels = BugReporterPlugin.labels;
+                foreach (var label in labels)
+                {
+                    menu.AddItem(new GUIContent(label), ArrayUtility.Contains(entry.labels, label), ToggleLabel, label);
+                }
+
+                menu.ShowAsContext();
+            }
+            EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.BeginHorizontal();
 

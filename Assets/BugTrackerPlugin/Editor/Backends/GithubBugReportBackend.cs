@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -60,10 +61,23 @@ namespace BugReporter
             SetupProjectInfo();
         }
 
-        public override void RequestIssues(Action<List<BugReporterPlugin.IssueEntry>> requestFinishedCallback)
+        public override void RequestIssues(Action<List<BugReporterPlugin.IssueEntry>> requestFinishedCallback, BugReporterPlugin.IssueFilter filter)
         {
             var settings = BugReporterPlugin.settings.GetBackendSettings(backendName);
-            var request = UnityWebRequest.Get(baseURL + "/repos/" + settings.projectPath + "/issues");
+
+            string requestURL = baseURL + "/repos/" + settings.projectPath + "/issues?";
+
+            if(filter.user != null)
+            {
+                requestURL += "assignee=" + filter.user.name + "&";
+            }
+
+            if (filter.labels != null && filter.labels.Length > 0)
+            {
+                requestURL += "labels="+filter.labelCommaString;
+            }
+
+            var request = UnityWebRequest.Get(requestURL);
             request.SetRequestHeader("Accept", "application/vnd.github.v3+json");
             request.SetRequestHeader("Authorization", "token " + _token);
 
@@ -83,7 +97,7 @@ namespace BugReporter
 
                     string newJson = "{ \"array\": " + asyncop.webRequest.downloadHandler.text + "}";
                     GithubIssueData[] issues = JsonUtility.FromJson<Wrapper<GithubIssueData>>(newJson).array;
-                    Debug.LogFormat("Found {0} issues", issues.Length);
+
                     for (int i = 0; i < issues.Length; ++i)
                     {
                         BugReporterPlugin.IssueEntry newEntry = new BugReporterPlugin.IssueEntry();
@@ -117,9 +131,40 @@ namespace BugReporter
         {
             issue.description = issue.description.Replace("\n", "\\n");
 
-            string json = string.Format(
-                "{{\"title\": \"{0}\", \"body\": \"{1}\"}}",
-                issue.title, issue.description);
+            StringBuilder data = new StringBuilder();
+            data.AppendFormat("{{\"title\": \"{0}\", \"body\": \"{1}\"", issue.title, issue.description);
+
+            if (issue.assignees.Length > 0)
+            {
+                data.Append(",\"assignees\":[");
+
+                for(int i = 0; i < issue.assignees.Length; ++i)
+                {
+                    data.AppendFormat("\"{0}\"", issue.assignees[i].name);
+                    if(i != issue.assignees.Length-1)
+                    {
+                        data.Append(",");
+                    }
+                }
+                data.Append("]");
+            }
+
+            if (issue.labels.Length > 0)
+            {
+                data.Append(",\"labels\":[");
+
+                for (int i = 0; i < issue.labels.Length; ++i)
+                {
+                    data.AppendFormat("\"{0}\"", issue.labels[i]);
+                    if (i != issue.labels.Length - 1)
+                    {
+                        data.Append(",");
+                    }
+                }
+                data.Append("]");
+            }
+
+            data.Append("}");
 
             var settings = BugReporterPlugin.settings.GetBackendSettings(backendName);
 
@@ -128,7 +173,7 @@ namespace BugReporter
             request.SetRequestHeader("Accept", "application/vnd.github.v3+json");
             request.SetRequestHeader("Authorization", "token " + _token);
 
-            request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(json));
+            request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(data.ToString()));
             request.uploadHandler.contentType = "application/json"; 
 
             request.downloadHandler = (DownloadHandler)new DownloadHandlerBuffer();
@@ -220,6 +265,43 @@ namespace BugReporter
 
         private void SetupProjectInfo()
         {
+            RequestUsers();
+            RequestLabels();
+        }
+
+        void RequestLabels()
+        {
+            var settings = BugReporterPlugin.settings.GetBackendSettings(backendName);
+            var request = UnityWebRequest.Get(baseURL + "/repos/" + settings.projectPath + "/labels");
+            request.SetRequestHeader("Accept", "application/vnd.github.v3+json");
+            request.SetRequestHeader("Authorization", "token " + _token);
+
+            var async = request.SendWebRequest();
+
+            async.completed += op =>
+            {
+                UnityWebRequestAsyncOperation asyncop = op as UnityWebRequestAsyncOperation;
+                if (asyncop.webRequest.isHttpError)
+                {
+                    Debug.Log(asyncop.webRequest.error);
+                }
+                else
+                {
+                    _labels.Clear();
+
+                    string newJson = "{ \"array\": " + asyncop.webRequest.downloadHandler.text + "}";
+                    GithubLabel[] labelsData = JsonUtility.FromJson<Wrapper<GithubLabel>>(newJson).array;
+                    Debug.LogFormat("[Github Backend] Found {0} labels in that project", labelsData.Length);
+                    for (int i = 0; i < labelsData.Length; ++i)
+                    {
+                        _labels.Add(labelsData[i].name);
+                    }
+                }
+            };
+        }
+
+        void RequestUsers()
+        {
             var settings = BugReporterPlugin.settings.GetBackendSettings(backendName);
             var request = UnityWebRequest.Get(baseURL + "/repos/" + settings.projectPath + "/assignees");
             request.SetRequestHeader("Accept", "application/vnd.github.v3+json");
@@ -240,8 +322,7 @@ namespace BugReporter
 
                     string newJson = "{ \"array\": " + asyncop.webRequest.downloadHandler.text + "}";
                     GithubUserData[] usersData = JsonUtility.FromJson<Wrapper<GithubUserData>>(newJson).array;
-                    List<BugReporterPlugin.UserEntry> entries = new List<BugReporterPlugin.UserEntry>();
-                    Debug.LogFormat("Found {0} users in that project", usersData.Length);
+                    Debug.LogFormat("[Github Backend] Found {0} users in that project", usersData.Length);
                     for (int i = 0; i < usersData.Length; ++i)
                     {
                         BugReporterPlugin.UserEntry entry = new BugReporterPlugin.UserEntry();
@@ -272,6 +353,12 @@ namespace BugReporter
         {
             public string login;
             public int id;
+        }
+
+        [System.Serializable]
+        public class GithubLabel
+        {
+            public string name;
         }
 
         [Serializable]
