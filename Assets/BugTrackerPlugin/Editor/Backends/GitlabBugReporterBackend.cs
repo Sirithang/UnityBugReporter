@@ -62,7 +62,7 @@ namespace BugReporter
 
             if (filter.labels != null && filter.labels.Length > 0)
             {
-                requestURL += "labels=" + filter.labelCommaString;
+                requestURL += "labels=" + System.Uri.EscapeDataString(filter.labelCommaString);
             }
 
             var request = UnityWebRequest.Get(requestURL);
@@ -76,7 +76,7 @@ namespace BugReporter
                 if (asyncop.webRequest.isHttpError)
                 {
                     Debug.LogError("couldn't get issues for repo " + settings.projectPath);
-                    Debug.LogError(asyncop.webRequest.error);
+                    Debug.LogError(asyncop.webRequest.downloadHandler.text);
                 }
                 else
                 {
@@ -251,7 +251,7 @@ namespace BugReporter
         void RequestUsers()
         {
             var settings = BugReporterPlugin.settings.GetBackendSettings(backendName);
-            var request = UnityWebRequest.Get(_apiPath + "/projects/" + settings.projectPath + "/members");
+            var request = UnityWebRequest.Get(_apiPath + "/projects/" + settings.projectPath + "/users");
             request.SetRequestHeader("PRIVATE-TOKEN", _token);
 
             var async = request.SendWebRequest();
