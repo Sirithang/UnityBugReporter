@@ -186,6 +186,7 @@ namespace BugReporter
                 return;
             }
 
+            _backend.OnPostInit -= OpenLogIssueWindow;
             var win = EditorWindow.GetWindow<BugReportWindow>();
             win.onWindowClosed = LogIssueWindowClosed;
         }
@@ -202,25 +203,31 @@ namespace BugReporter
             else
                 win.entry.unityBTURL = "";
 
-            win.entry.BuildSemiColonStrings();
+            win.entry.BuildCommaStrings();
 
-            if (win.uploadScreenshot)
+            if (_imgUploader!= null && win.uploadScreenshot)
             {
                 _imgUploader.UploadFile(_screenShot, (valid, url) =>
                 {
+                    bool upload = true;
                     if (valid)
                     {
                         win.entry.description += string.Format("\n\n![Screenshot]({0})", url);
                     }
                     else
                     {
-                        Debug.LogError("Upload of screenshot failed, logging without the picture");
+                        upload = EditorUtility.DisplayDialog("Fail screenshot upload",
+                            "Uplaoding the screenshot failed, do you still want to log the issue without the screenshot?",
+                            "Yes", "No");
                     }
 
-                    if (win.logPosition)
-                        win.entry.description += "\n\n" + win.entry.unityBTURL;
+                    if (upload)
+                    {
+                        if (win.logPosition)
+                            win.entry.description += "\n\n" + win.entry.unityBTURL;
 
-                    _backend.LogIssue(win.entry);
+                        _backend.LogIssue(win.entry);
+                    }
                 });
 
             }
@@ -359,9 +366,9 @@ namespace BugReporter
 
             public string unityBTURL;
 
-            public void ParseSemiColonStrings()
+            public void ParseCommaStrings()
             {
-                string[] assigneeNames = assigneesString.Split(';');
+                string[] assigneeNames = assigneesString.Split(',');
                 assignees = new UserEntry[0];
                 for (int i = 0; i < assigneeNames.Length; ++i)
                 {
@@ -370,16 +377,16 @@ namespace BugReporter
                         ArrayUtility.Add(ref assignees, user);
                 }
 
-                labels = labelsString.Split(';');
+                labels = labelsString.Split(',');
             }
 
-            public void BuildSemiColonStrings()
+            public void BuildCommaStrings()
             {
                 assigneesString = "";
                 for (int i = 0; i < assignees.Length; ++i)
-                    assigneesString += assignees[i].name + ((i == assignees.Length - 1) ? "" : ";");
+                    assigneesString += assignees[i].name + ((i == assignees.Length - 1) ? "" : ",");
 
-                labelsString = string.Join(";", labels);
+                labelsString = string.Join(",", labels);
             }
 
             public void BuildUnityBTURL()
@@ -434,6 +441,7 @@ namespace BugReporter
         {
             public string token = "";
             public string projectPath = "";
+            public string apiPath = "";
         }
 
         [System.Serializable]
@@ -522,5 +530,12 @@ namespace BugReporter
         //should upload the image and call onUploadFinished when done.
         //1st param must be true if upload succeed false otherwise, 2nd param is link to picture if succeed
         public abstract void UploadFile(byte[] data, System.Action<bool, string> onUploadFinished);
+    }
+
+    //used by class that receive JSON that are array without an encapsulating object. JSONUtility can't deserialize those, so we use that class
+    [Serializable]
+    public class Wrapper<T>
+    {
+        public T[] array = null;
     }
 }

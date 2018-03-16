@@ -38,7 +38,7 @@ namespace BugReporter
                 ArrayUtility.Add(ref entry.assignees, user);
             }
 
-            entry.BuildSemiColonStrings();
+            entry.BuildCommaStrings();
         }
 
         void ToggleLabel(object data)
@@ -54,7 +54,7 @@ namespace BugReporter
                 ArrayUtility.Add(ref entry.labels, label);
             }
 
-            entry.BuildSemiColonStrings();
+            entry.BuildCommaStrings();
         }
 
         private void OnGUI()
