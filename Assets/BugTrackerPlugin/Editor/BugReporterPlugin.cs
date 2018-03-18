@@ -356,6 +356,10 @@ namespace BugReporter
             public string assigneesString;
             public string labelsString;
 
+            public int severity = -1;
+
+            public string webUrl = "";
+
             public UserEntry[] assignees = new UserEntry[0];
             public string[] labels = new string[0];
 

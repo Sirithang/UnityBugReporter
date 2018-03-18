@@ -246,6 +246,16 @@ public class BugTrackerWindow : EditorWindow
                                 EditorGUILayout.LabelField(assigneesList);
                                 EditorGUILayout.EndHorizontal();
 
+                                if (issue.webUrl != "")
+                                {
+                                    EditorGUILayout.BeginHorizontal();
+                                    if(GUILayout.Button("Open in Browser"))
+                                        Application.OpenURL(issue.webUrl);
+                                    if (GUILayout.Button("Copy url to clipboard"))
+                                        EditorGUIUtility.systemCopyBuffer = issue.webUrl;
+                                    EditorGUILayout.EndHorizontal();
+                                }
+
                                 EditorGUILayout.EndVertical();
                             }
                         }

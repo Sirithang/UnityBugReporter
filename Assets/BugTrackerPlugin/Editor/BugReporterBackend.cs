@@ -40,6 +40,14 @@ namespace BugReporter
         /// <returns></returns>
         public abstract string GetName();
         /// <summary>
+        /// This should return true if the issue tracker have a severity/priority system
+        /// Will return as out parameters the scale (0 to max) and the default value it should assign to new issues.
+        /// </summary>
+        /// <param name="count"></param>
+        /// <param name="defaultValue"></param>
+        /// <returns></returns>
+        public abstract bool UsePriority(out int max, out int defaultValue);
+        /// <summary>
         /// Called by the system when need to recover issues/bug. It should call requestFinishedCallback once all issue are reconvered.
         /// </summary>
         /// <param name="requestFinishedCallback"></param>

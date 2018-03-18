@@ -49,6 +49,13 @@ namespace BugReporter
             return backendName;
         }
 
+        public override bool UsePriority(out int max, out int defaultValue)
+        {
+            max = 9;
+            defaultValue = 0;
+            return false;
+        }
+
         public override void RequestIssues(Action<List<BugReporterPlugin.IssueEntry>> requestFinishedCallback, BugReporterPlugin.IssueFilter filter)
         {
             var settings = BugReporterPlugin.settings.GetBackendSettings(backendName);
@@ -90,6 +97,7 @@ namespace BugReporter
                         BugReporterPlugin.IssueEntry newEntry = new BugReporterPlugin.IssueEntry();
                         newEntry.title = issues[i].title;
                         newEntry.description = issues[i].description;
+                        newEntry.webUrl = issues[i].web_url;
 
                         newEntry.assignees = new BugReporterPlugin.UserEntry[0];
                         if (issues[i].assignees != null)
@@ -141,6 +149,11 @@ namespace BugReporter
                 data.Append(",\"labels\":\"");
                 data.Append(issue.labelsString);
                 data.Append("\"");
+            }
+
+            if (issue.severity != -1)
+            {
+                data.AppendFormat(",\"weight\":\"{0}\"", issue.severity);
             }
 
             data.Append("}");
@@ -334,6 +347,7 @@ namespace BugReporter
         {
             public string title;
             public string description;
+            public string web_url;
             public GitlabUserData[] assignees = new GitlabUserData[0];
         }
 

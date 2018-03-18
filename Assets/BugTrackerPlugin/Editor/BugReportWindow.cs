@@ -14,10 +14,14 @@ namespace BugReporter
         public System.Action<BugReportWindow> onWindowClosed;
 
         private float timeScaleSaved;
+        private int severityMax = 0;
 
         private void OnEnable()
         {
             entry = new BugReporterPlugin.IssueEntry();
+
+            BugReporterPlugin.backend.UsePriority(out severityMax, out entry.severity);
+
             if (Application.isPlaying)
             {
                 timeScaleSaved = Time.timeScale;
@@ -94,6 +98,11 @@ namespace BugReporter
                 menu.ShowAsContext();
             }
             EditorGUILayout.EndHorizontal();
+
+            if (severityMax != 0)
+            {
+                entry.severity = EditorGUILayout.IntSlider("Severity", entry.severity, 0, severityMax);
+            }
 
             EditorGUILayout.BeginHorizontal();
 

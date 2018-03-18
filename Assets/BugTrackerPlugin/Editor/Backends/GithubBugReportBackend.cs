@@ -44,6 +44,13 @@ namespace BugReporter
             return _isLoggedIn;
         }
 
+        public override bool UsePriority(out int count, out int defaultValue)
+        {
+            count = 0;
+            defaultValue = 0;
+            return false;
+        }
+
         public override void SetProjectPath(string projectPath)
         {
             var settings = BugReporterPlugin.settings.GetBackendSettings(backendName);
