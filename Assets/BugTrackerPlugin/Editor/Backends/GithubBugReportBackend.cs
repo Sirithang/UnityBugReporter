@@ -108,7 +108,7 @@ namespace BugReporter
                         }
 
                         newEntry.RetrieveDataFromUnityURL();
-                        newEntry.BuildSemiColonStrings();
+                        newEntry.BuildCommaStrings();
 
                         _issues.Add(newEntry);
                     }
@@ -350,12 +350,6 @@ namespace BugReporter
         public class GithubLabel
         {
             public string name = "";
-        }
-
-        [Serializable]
-        private class Wrapper<T>
-        {
-            public T[] array = null;
         }
     }
 

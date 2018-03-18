@@ -1,11 +1,18 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using BugReporter;
 using UnityEditor;
 using UnityEngine;
 
 public class BugTrackerWindow : EditorWindow
 {
+    private readonly string bugIconeBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABGdBTUEAALGPC/xhBQAAAAlwSFlzAAAOwgAADsIBFShKgAAAABl0RVh0U29mdHdhcmUAcGFpbnQubmV0IDQuMC4xOdTWsmQAAADiSURBVFhH7Y7BDsMgDEPZbf//w12MShUCSROg3QVLTy0QO04RHd90eDjH10mEm4jZOYmwEMIb1md0sSRcohi05fy9x52Hzra0kIIVMuPNwsDTBVQ/ezRRA0hefzfDYwazBUCTgYu3C1Q5XiNYUQBcOfj5V4E8HzGBVQXALrAL7ALDBSx6Ho08P2rs0ZvVYB46BQIqI1MkA1QZEXNlFIpkNDlvF6BvLVx6AmYLsD2t2KOKaiZ5vJY/6+kC9LWFoQKOEv7e485DZ5+swAjhxVzFPFJEeOckwkzE7FrxcItz3KGUflKLidBynYcNAAAAAElFTkSuQmCC";
+
+    private readonly string bugIconeSelectedBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAZdEVYdFNvZnR3YXJlAHBhaW50Lm5ldCA0LjAuMTnU1rJkAAABS0lEQVRYR62UAW6DMBAEqdRX9f//IqzPpo6ZBfuSkUaqyg4maZNtkX3Sr3PefP+9t98efsx5Mzrszr49XObncP9LHDyq+1SnKYE7vF13TjSP4E2auh4zBJumrsfMU0YUN+vGgU1T16tIuUhhb905sOnVpnoBg1HtYo5gM6pdzP+Z/o/XNhIEm1Htqic4JLWNBMGG1DaS44eVz7v2kSHYkDpT+6VItsiAjVP7dGTAxql9OjJg49Q+HRmwcWqfjgzYOLVPRwZsnNqnIwM2Tu2Xo+7ze3Hl+0TWLh1epK2z6wrTD9F/gw0svRDtIwvKL2g4WrcObEbdi8DxqHYxR7AZ1S7m70y9hdrFHMGm9+ZPWHh8CG1iimDTfDq8gXFT12OGYNPU9ZjdU4bunehexcXJZhp7wxW7w1OUOPMg2VftmH6Qbx880t/8zkm27QURUshXRlt6awAAAABJRU5ErkJggg==";
+
     private Vector2 scrollPosition = Vector2.zero;
     private GUIContent iconeContent, iconeSelectedContent;
 
@@ -36,13 +43,16 @@ public class BugTrackerWindow : EditorWindow
 
         BugReporterPlugin.Init();
 
-        //if(BugReporterPlugin.backend != null && BugReporterPlugin.backend.CanRequest())
-        //{
-        //    BugReporterPlugin.RequestIssues(ReceivedIssues);
-        //}
+        byte[] data = System.Convert.FromBase64String(bugIconeBase64);
+        Texture2D texture = new Texture2D(1,1);
+        texture.LoadImage(data);
 
-        iconeContent = new GUIContent(EditorGUIUtility.Load("BugIcone.png") as Texture2D);
-        iconeSelectedContent = new GUIContent(EditorGUIUtility.Load("BugIcone_Selected.png") as Texture2D);
+        iconeContent = new GUIContent(texture);
+
+        data = System.Convert.FromBase64String(bugIconeSelectedBase64);
+        texture = new Texture2D(1, 1);
+        texture.LoadImage(data);
+        iconeSelectedContent = new GUIContent(texture);
 
         SceneView.onSceneGUIDelegate += SceneGUI;
     }
@@ -197,9 +207,7 @@ public class BugTrackerWindow : EditorWindow
 
                             if (GUILayout.Button(issue.title, _entryHeaderStyle))
                             {
-                                if (_currentOpenEntry != -1) _foldoutInfos[_currentOpenEntry] = false;
-                                _currentOpenEntry = i;
-                                _foldoutInfos[i] = true;
+                                OpenIssue(i);
                                 SceneView.RepaintAll();
                             }
 
@@ -249,16 +257,46 @@ public class BugTrackerWindow : EditorWindow
         }
     }
 
+    void OpenIssue(int issue)
+    {
+        if (_currentOpenEntry != -1)
+        {
+            _foldoutInfos[_currentOpenEntry] = false;
+        }
+
+        _currentOpenEntry = issue;
+
+        if (_currentOpenEntry == -1)
+            return;
+
+        _foldoutInfos[_currentOpenEntry] = true;
+    }
+
     void SceneGUI(SceneView view)
     {
-        for(int i = 0; i < _currentLevelsIssues.Count; ++i)
+        Handles.BeginGUI();
+        for (int i = 0; i < _currentLevelsIssues.Count; ++i)
         {
             var issue = _currentLevelsIssues[i];
             Vector3 position = issue.cameraPosition - issue.cameraRotation * new Vector3(0, 0, issue.cameraDistance);
 
 
             bool isCurrentIssue = _currentOpenEntry != -1 && BugReporterPlugin.issues[_currentOpenEntry] == issue;
-            Handles.Label(position, isCurrentIssue ? iconeSelectedContent : iconeContent);
+            GUIContent currentContent = isCurrentIssue ? iconeSelectedContent : iconeContent;
+            Rect guiPosition = HandleUtility.WorldPointToSizedRect(position, currentContent, GUI.skin.label);
+
+            float size = 1.0f / HandleUtility.GetHandleSize(position);
+
+            guiPosition.width *= size;
+            guiPosition.height *= size;
+
+            if (GUI.Button(guiPosition, currentContent, "label"))
+            {
+                OpenIssue(BugReporterPlugin.issues.FindIndex(a => a == issue));
+                Repaint();
+            }
         }
+
+        Handles.EndGUI();
     }
 }
