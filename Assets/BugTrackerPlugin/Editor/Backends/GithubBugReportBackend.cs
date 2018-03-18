@@ -101,6 +101,7 @@ namespace BugReporter
                         BugReporterPlugin.IssueEntry newEntry = new BugReporterPlugin.IssueEntry();
                         newEntry.title = issues[i].title;
                         newEntry.description = issues[i].body;
+                        newEntry.webUrl = issues[i].url;
 
                         newEntry.assignees = new BugReporterPlugin.UserEntry[0];
                         if (issues[i].assignees != null)
@@ -341,6 +342,8 @@ namespace BugReporter
         {
             public string title = "";
             public string body = "";
+
+            public string url;
 
             public GithubUserData user = null;
             public GithubUserData[] assignees = new GithubUserData[0];
