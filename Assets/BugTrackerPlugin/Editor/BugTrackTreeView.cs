@@ -10,7 +10,7 @@ public class BugTrackTreeView : TreeView
 {
     private readonly float BUTTON_ROW_HEIGHT = EditorGUIUtility.singleLineHeight + 4;
 
-    private GUIStyle _descriptionStyle;
+    private GUIStyle _descriptionStyle = null;
     private BugTrackerWindow _bugTrackerWindow;
 
     public BugTrackTreeView(TreeViewState state) : base(state)
@@ -39,11 +39,6 @@ public class BugTrackTreeView : TreeView
 
         multiColumnHeader.sortingChanged += OnSortingChanged;
         multiColumnHeader.ResizeToFit();
-
-        _descriptionStyle = new GUIStyle("box");
-        _descriptionStyle.alignment = TextAnchor.LowerLeft;
-        _descriptionStyle.richText = true;
-        _descriptionStyle.wordWrap = true;
     }
 
     void OnSortingChanged(MultiColumnHeader multiColumnHeader)
@@ -107,6 +102,14 @@ public class BugTrackTreeView : TreeView
 
     protected override void RowGUI(RowGUIArgs args)
     {
+        if (_descriptionStyle == null)
+        {
+            _descriptionStyle = new GUIStyle("box");
+            _descriptionStyle.alignment = TextAnchor.LowerLeft;
+            _descriptionStyle.richText = true;
+            _descriptionStyle.wordWrap = true;
+        }
+
         BugTrackerTreeItem itm = args.item as BugTrackerTreeItem;
         BugReporterPlugin.IssueEntry issue = itm.entry;
 

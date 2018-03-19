@@ -20,9 +20,6 @@ public class BugTrackerWindow : EditorWindow
 
     private int _currentOpenEntry = -1;
 
-    private GUIStyle _entryHeaderStyle;
-    private GUIStyle _entryDescriptionStyle;
-
     private BugReporterPlugin.IssueFilter _filter = new BugReporterPlugin.IssueFilter();
 
     private BugTrackTreeView _treeView;
@@ -38,13 +35,6 @@ public class BugTrackerWindow : EditorWindow
 
     private void OnEnable()
     {
-        _entryHeaderStyle = new GUIStyle("box");
-        _entryHeaderStyle.stretchWidth = true;
-        _entryHeaderStyle.alignment = TextAnchor.MiddleLeft;
-        _entryHeaderStyle.padding = new RectOffset(2, 2, 2, 2);
-
-        _entryDescriptionStyle = new GUIStyle(EditorStyles.textArea);
-
         BugReporterPlugin.Init();
 
         byte[] data = System.Convert.FromBase64String(bugIconeBase64);
@@ -244,82 +234,9 @@ public class BugTrackerWindow : EditorWindow
                     BugReporterPlugin.RequestIssues(ReceivedIssues, _filter);
                 }
 
-                if (BugReporterPlugin.backend.CanRequest())
+                if (BugReporterPlugin.issueRequestState == BugReporterPlugin.IssueRequestState.Requesting)
                 {
-                    if (BugReporterPlugin.issueRequestState == BugReporterPlugin.IssueRequestState.Requesting)
-                    {
-                        EditorGUILayout.LabelField("LOADING ISSUES...");
-                    }
-                    //else if(BugReporterPlugin.issueRequestState == BugReporterPlugin.IssueRequestState.Completed)
-                    //{
-                    //    EditorGUILayout.BeginScrollView(scrollPosition);
-
-                    //    for (int i = 0; i < BugReporterPlugin.issues.Count; ++i)
-                    //    {
-                    //        var issue = BugReporterPlugin.issues[i];
-
-                    //        bool canGoTo = issue.unityBTURL != "" && _currentLevelsIssues.Contains(issue);
-
-                    //        if (canGoTo)
-                    //            EditorGUILayout.BeginHorizontal();
-
-                    //        if (GUILayout.Button(issue.title, _entryHeaderStyle))
-                    //        {
-                    //            OpenIssue(i);
-                    //            SceneView.RepaintAll();
-                    //        }
-
-                    //        if (canGoTo)
-                    //        {
-
-                    //            if(GUILayout.Button("Go To", GUILayout.Width(64)))
-                    //            {
-                    //                var sceneView = GetWindow<SceneView>();
-                    //                sceneView.LookAt(issue.cameraPosition, issue.cameraRotation, issue.cameraDistance);
-                    //            }
-
-                    //            EditorGUILayout.EndHorizontal();
-                    //        }
-
-
-                    //        if(_foldoutInfos[i])
-                    //        {
-                    //            EditorGUILayout.BeginVertical(_entryDescriptionStyle);
-                    //            EditorGUILayout.LabelField(issue.description);
-
-                    //            EditorGUILayout.Space();
-
-                    //            string assigneesList = "Assignees : ";
-
-                    //            if(issue.assignees.Length == 0)
-                    //            {
-                    //                assigneesList += "None";
-                    //            }
-                    //            else
-                    //            {
-                    //                assigneesList += issue.assigneesString;
-                    //            }
-
-                    //            EditorGUILayout.BeginHorizontal();
-                    //            EditorGUILayout.LabelField(assigneesList);
-                    //            EditorGUILayout.EndHorizontal();
-
-                    //            if (issue.webUrl != "")
-                    //            {
-                    //                EditorGUILayout.BeginHorizontal();
-                    //                if(GUILayout.Button("Open in Browser"))
-                    //                    Application.OpenURL(issue.webUrl);
-                    //                if (GUILayout.Button("Copy url to clipboard"))
-                    //                    EditorGUIUtility.systemCopyBuffer = issue.webUrl;
-                    //                EditorGUILayout.EndHorizontal();
-                    //            }
-
-                    //            EditorGUILayout.EndVertical();
-                    //        }
-                    //    }
-
-                    //    EditorGUILayout.EndScrollView();
-                    //}
+                    EditorGUILayout.LabelField("LOADING ISSUES...");
                 }
 
                 if (Event.current.type == EventType.Repaint)

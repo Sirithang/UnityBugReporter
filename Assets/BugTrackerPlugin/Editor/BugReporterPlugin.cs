@@ -159,6 +159,8 @@ namespace BugReporter
         public static void Init()
         {
             _issueRequestState = IssueRequestState.Empty;
+            LoadOrCreateSettings();
+
             SetupBackend(settings.currentBackendType);
             SetupImageUploader(settings.currentImageUploader);
         }
@@ -301,12 +303,6 @@ namespace BugReporter
         public static UserEntry GetUserInfoByName(string username)
         {
             return users.Find(user => { return user.name == username; });
-        }
-
-        [DidReloadScripts]
-        static void ScriptReloaded()
-        {
-            LoadOrCreateSettings();
         }
 
         static void LoadOrCreateSettings()
