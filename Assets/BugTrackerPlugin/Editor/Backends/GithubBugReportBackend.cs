@@ -115,6 +115,15 @@ namespace BugReporter
                             }
                         }
 
+                        newEntry.labels = new string[0];
+                        if (issues[i].labels != null)
+                        {
+                            for (int j = 0; j < issues[i].labels.Length; ++j)
+                            {
+                                ArrayUtility.Add(ref newEntry.labels, issues[i].labels[j].name);
+                            }
+                        }
+
                         newEntry.RetrieveDataFromUnityURL();
                         newEntry.BuildCommaStrings();
 
@@ -346,6 +355,7 @@ namespace BugReporter
             public string url;
 
             public GithubUserData user = null;
+            public GithubLabel[] labels = new GithubLabel[0];
             public GithubUserData[] assignees = new GithubUserData[0];
         }
 

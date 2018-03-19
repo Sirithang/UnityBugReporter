@@ -98,6 +98,7 @@ namespace BugReporter
                         newEntry.title = issues[i].title;
                         newEntry.description = issues[i].description;
                         newEntry.webUrl = issues[i].web_url;
+                        newEntry.severity = issues[i].weight;
 
                         newEntry.assignees = new BugReporterPlugin.UserEntry[0];
                         if (issues[i].assignees != null)
@@ -108,6 +109,15 @@ namespace BugReporter
                                 var userEntry = BugReporterPlugin.GetUserInfoByID(issues[i].assignees[j].id.ToString());
                                 if (userEntry != null)
                                     ArrayUtility.Add(ref newEntry.assignees, userEntry);
+                            }
+                        }
+
+                        newEntry.labels = new string[0];
+                        if (issues[i].labels != null)
+                        {
+                            for (int j = 0; j < issues[i].labels.Length; ++j)
+                            {
+                                ArrayUtility.Add(ref newEntry.labels, issues[i].labels[j]);
                             }
                         }
 
@@ -348,6 +358,8 @@ namespace BugReporter
             public string title;
             public string description;
             public string web_url;
+            public int weight;
+            public string[] labels;
             public GitlabUserData[] assignees = new GitlabUserData[0];
         }
 

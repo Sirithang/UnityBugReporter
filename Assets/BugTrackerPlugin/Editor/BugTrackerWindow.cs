@@ -1,8 +1,10 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using BugReporter;
 using UnityEditor;
+using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 
 public class BugTrackerWindow : EditorWindow
@@ -17,12 +19,14 @@ public class BugTrackerWindow : EditorWindow
     private GUIContent iconeContent, iconeSelectedContent;
 
     private int _currentOpenEntry = -1;
-    private bool[] _foldoutInfos;
 
     private GUIStyle _entryHeaderStyle;
     private GUIStyle _entryDescriptionStyle;
 
     private BugReporterPlugin.IssueFilter _filter = new BugReporterPlugin.IssueFilter();
+
+    private BugTrackTreeView _treeView;
+    private Rect _lastRect = new Rect();
 
     private List<BugReporterPlugin.IssueEntry> _currentLevelsIssues = new List<BugReporterPlugin.IssueEntry>();
 
@@ -54,6 +58,8 @@ public class BugTrackerWindow : EditorWindow
         texture.LoadImage(data);
         iconeSelectedContent = new GUIContent(texture);
 
+        BuildTreeView();
+
         SceneView.onSceneGUIDelegate += SceneGUI;
     }
 
@@ -64,8 +70,52 @@ public class BugTrackerWindow : EditorWindow
         SceneView.RepaintAll();
     }
 
+    private void BuildTreeView()
+    {
+        TreeViewState state = new TreeViewState();
+
+        MultiColumnHeaderState.Column[] columns = new MultiColumnHeaderState.Column[5];
+
+        columns[0] = new MultiColumnHeaderState.Column();
+        columns[0].headerContent = new GUIContent("Go");
+        columns[0].width = 50;
+        columns[0].autoResize = false;
+        columns[0].minWidth = 50;
+        columns[0].maxWidth = 50;
+        columns[0].canSort = false;
+
+        columns[1] = new MultiColumnHeaderState.Column();
+        columns[1].headerContent = new GUIContent("Title");
+        columns[1].width = 100;
+        columns[1].canSort = true;
+
+        columns[2] = new MultiColumnHeaderState.Column();
+        columns[2].headerContent = new GUIContent("Assignees");
+        columns[2].width = 100;
+        columns[2].canSort = true;
+
+        columns[3] = new MultiColumnHeaderState.Column();
+        columns[3].headerContent = new GUIContent("Labels");
+        columns[3].width = 100;
+        columns[3].canSort = true;
+
+        columns[4] = new MultiColumnHeaderState.Column();
+        columns[4].headerContent = new GUIContent("Severity");
+        columns[4].width = 100;
+        columns[4].canSort = true;
+
+        MultiColumnHeaderState headerstate = new MultiColumnHeaderState(columns);
+        MultiColumnHeader header = new MultiColumnHeader(headerstate);
+
+        _treeView = new BugTrackTreeView(state, header);
+        _treeView.SetOwner(this);
+        _treeView.Reload();
+    }
+
     void ReceivedIssues(List<BugReporterPlugin.IssueEntry> entries)
     {
+        _treeView.Reload();
+
         int sceneCount = UnityEngine.SceneManagement.SceneManager.sceneCount;
         string[] loadedSceneGUID = new string[sceneCount];
         for (int i = 0; i < sceneCount; ++i)
@@ -76,13 +126,10 @@ public class BugTrackerWindow : EditorWindow
 
 
         _currentOpenEntry = -1;
-        _foldoutInfos = new bool[entries.Count];
 
         _currentLevelsIssues.Clear();
         for (int i = 0; i < entries.Count; ++i)
         {
-            _foldoutInfos[i] = false;
-
            if(ArrayUtility.Contains(loadedSceneGUID, entries[i].sceneGUID))
            {
                _currentLevelsIssues.Add(entries[i]);
@@ -112,6 +159,17 @@ public class BugTrackerWindow : EditorWindow
         }
 
         _filter.BuildLabelCommaString();
+    }
+
+    public bool IsCurrentSceneIssue(BugReporterPlugin.IssueEntry issue)
+    {
+        return issue.unityBTURL != "" && _currentLevelsIssues.Contains(issue);
+    }
+
+    public void GoToIssue(BugReporterPlugin.IssueEntry issue)
+    {
+        var sceneView = GetWindow<SceneView>();
+        sceneView.LookAt(issue.cameraPosition, issue.cameraRotation, issue.cameraDistance);
     }
 
     private void OnGUI()
@@ -192,94 +250,92 @@ public class BugTrackerWindow : EditorWindow
                     {
                         EditorGUILayout.LabelField("LOADING ISSUES...");
                     }
-                    else if(BugReporterPlugin.issueRequestState == BugReporterPlugin.IssueRequestState.Completed)
-                    {
-                        EditorGUILayout.BeginScrollView(scrollPosition);
+                    //else if(BugReporterPlugin.issueRequestState == BugReporterPlugin.IssueRequestState.Completed)
+                    //{
+                    //    EditorGUILayout.BeginScrollView(scrollPosition);
 
-                        for (int i = 0; i < BugReporterPlugin.issues.Count; ++i)
-                        {
-                            var issue = BugReporterPlugin.issues[i];
+                    //    for (int i = 0; i < BugReporterPlugin.issues.Count; ++i)
+                    //    {
+                    //        var issue = BugReporterPlugin.issues[i];
 
-                            bool canGoTo = issue.unityBTURL != "" && _currentLevelsIssues.Contains(issue);
+                    //        bool canGoTo = issue.unityBTURL != "" && _currentLevelsIssues.Contains(issue);
 
-                            if (canGoTo)
-                                EditorGUILayout.BeginHorizontal();
+                    //        if (canGoTo)
+                    //            EditorGUILayout.BeginHorizontal();
 
-                            if (GUILayout.Button(issue.title, _entryHeaderStyle))
-                            {
-                                OpenIssue(i);
-                                SceneView.RepaintAll();
-                            }
+                    //        if (GUILayout.Button(issue.title, _entryHeaderStyle))
+                    //        {
+                    //            OpenIssue(i);
+                    //            SceneView.RepaintAll();
+                    //        }
 
-                            if (canGoTo)
-                            {
+                    //        if (canGoTo)
+                    //        {
 
-                                if(GUILayout.Button("Go To", GUILayout.Width(64)))
-                                {
-                                    var sceneView = GetWindow<SceneView>();
-                                    sceneView.LookAt(issue.cameraPosition, issue.cameraRotation, issue.cameraDistance);
-                                }
+                    //            if(GUILayout.Button("Go To", GUILayout.Width(64)))
+                    //            {
+                    //                var sceneView = GetWindow<SceneView>();
+                    //                sceneView.LookAt(issue.cameraPosition, issue.cameraRotation, issue.cameraDistance);
+                    //            }
 
-                                EditorGUILayout.EndHorizontal();
-                            }
+                    //            EditorGUILayout.EndHorizontal();
+                    //        }
 
 
-                            if(_foldoutInfos[i])
-                            {
-                                EditorGUILayout.BeginVertical(_entryDescriptionStyle);
-                                EditorGUILayout.LabelField(issue.description);
+                    //        if(_foldoutInfos[i])
+                    //        {
+                    //            EditorGUILayout.BeginVertical(_entryDescriptionStyle);
+                    //            EditorGUILayout.LabelField(issue.description);
 
-                                EditorGUILayout.Space();
+                    //            EditorGUILayout.Space();
 
-                                string assigneesList = "Assignees : ";
+                    //            string assigneesList = "Assignees : ";
 
-                                if(issue.assignees.Length == 0)
-                                {
-                                    assigneesList += "None";
-                                }
-                                else
-                                {
-                                    assigneesList += issue.assigneesString;
-                                }
+                    //            if(issue.assignees.Length == 0)
+                    //            {
+                    //                assigneesList += "None";
+                    //            }
+                    //            else
+                    //            {
+                    //                assigneesList += issue.assigneesString;
+                    //            }
 
-                                EditorGUILayout.BeginHorizontal();
-                                EditorGUILayout.LabelField(assigneesList);
-                                EditorGUILayout.EndHorizontal();
+                    //            EditorGUILayout.BeginHorizontal();
+                    //            EditorGUILayout.LabelField(assigneesList);
+                    //            EditorGUILayout.EndHorizontal();
 
-                                if (issue.webUrl != "")
-                                {
-                                    EditorGUILayout.BeginHorizontal();
-                                    if(GUILayout.Button("Open in Browser"))
-                                        Application.OpenURL(issue.webUrl);
-                                    if (GUILayout.Button("Copy url to clipboard"))
-                                        EditorGUIUtility.systemCopyBuffer = issue.webUrl;
-                                    EditorGUILayout.EndHorizontal();
-                                }
+                    //            if (issue.webUrl != "")
+                    //            {
+                    //                EditorGUILayout.BeginHorizontal();
+                    //                if(GUILayout.Button("Open in Browser"))
+                    //                    Application.OpenURL(issue.webUrl);
+                    //                if (GUILayout.Button("Copy url to clipboard"))
+                    //                    EditorGUIUtility.systemCopyBuffer = issue.webUrl;
+                    //                EditorGUILayout.EndHorizontal();
+                    //            }
 
-                                EditorGUILayout.EndVertical();
-                            }
-                        }
+                    //            EditorGUILayout.EndVertical();
+                    //        }
+                    //    }
 
-                        EditorGUILayout.EndScrollView();
-                    }
+                    //    EditorGUILayout.EndScrollView();
+                    //}
                 }
+
+                if (Event.current.type == EventType.Repaint)
+                    _lastRect = GUILayoutUtility.GetLastRect();
+
+                float y = _lastRect.y + _lastRect.height;
+                Rect r = new Rect(0, y, position.width, position.height - y);
+                _treeView.OnGUI(r);
             }
         }
     }
 
-    void OpenIssue(int issue)
+    public void OpenIssue(int issue)
     {
-        if (_currentOpenEntry != -1)
-        {
-            _foldoutInfos[_currentOpenEntry] = false;
-        }
-
         _currentOpenEntry = issue;
-
-        if (_currentOpenEntry == -1)
-            return;
-
-        _foldoutInfos[_currentOpenEntry] = true;
+        SceneView.RepaintAll();
     }
 
     void SceneGUI(SceneView view)
@@ -302,8 +358,8 @@ public class BugTrackerWindow : EditorWindow
 
             if (GUI.Button(guiPosition, currentContent, "label"))
             {
-                OpenIssue(BugReporterPlugin.issues.FindIndex(a => a == issue));
-                Repaint();
+                //TODO :  really I need to stop searching stuff in list and build lookup table...
+                _treeView.SelectIssue(BugReporterPlugin.issues.FindIndex(a => a == issue));
             }
         }
 
